@@ -330,6 +330,98 @@ fsApp.post('/deleteOldPosts', cors({origin: URLs.local}), async (req,res) => {
 })
 
 // ************************************************************* //
+fsApp.post('/setPost', cors({origin: URLs.local}), async (req,res) => {
+  let body = JSON.parse(req.body)
+  for (i in body.data) {
+    const post = body.data[i]
+    admin.firestore()
+    .collection(`${body.dept}-posts`)
+    .doc(post.id)
+    .set(post,{merge:true})
+    .catch((error) => {
+      console.log(error)
+    })
+  }
+  if (body.pos.group === "misc" && !body.data[0].lastMod) {
+    console.log(body.data[0].modify)
+    admin.firestore()
+    .collection(body.dept)
+    .doc('rota')
+    .collection('archive')
+    .doc(body.archive)
+    .get()
+    .then(async (doc) => {
+      let archiveUpdate = {}
+      if (doc.exists) {
+        archiveUpdate = structuredClone(doc.data())
+        let rowUpdate = {}
+        let active = false
+        archiveUpdate[body.data[0].shift].rows.filter((row,i) => {
+          if (row.id === body.pos.id) {
+            active = true
+            rowUpdate = structuredClone(row)
+            body.data.map((post) => {
+              let day = new Date(post.date).getDay()
+              if (day === 0) {
+                rowUpdate[7] = post.id
+              } else {
+                rowUpdate[day] = post.id
+              }
+            })
+            // console.log(rowUpdate)
+            archiveUpdate[body.data[0].shift].rows[i] = rowUpdate
+          }
+        })
+        if (!active) {
+          rowUpdate = {
+            id: body.pos.id,
+            label: body.pos.label,
+            color: body.data[0].color,
+            group: body.pos.group,
+            1: '',
+            2: '',
+            3: '',
+            4: '',
+            5: '',
+            6: '',
+            7: ''
+          }
+          body.data.map((post) => {
+            let day = new Date(post.date).getDay()
+            if (day === 0) {
+              rowUpdate[7] = post.id
+            } else {
+              rowUpdate[day] = post.id
+            }
+          })
+          archiveUpdate[body.data[0].shift].rows.push(rowUpdate)
+        }
+      } else {
+        // create archive doc
+        return res.json(JSON.stringify({message: "Archive doc not found"})).send()
+      }
+      await admin.firestore()
+      .collection(body.dept)
+      .doc('rota')
+      .collection('archive')
+      .doc(body.archive)
+      .set(archiveUpdate)
+      .then(() => {
+        return res.json(JSON.stringify({message: "Operation complete, archive update"})).send()
+      })
+      .catch((error) => {
+        return res.json(JSON.stringify({message: "Error", error: error})).send()
+      })
+    })
+    .catch((error) => {
+      console.log(error)
+      return res.json(JSON.stringify({message: "Error getting archive doc", error: error})).send()
+    })
+  } else {
+    return res.json(JSON.stringify({message: "Operation complete, no archive update"})).send()
+  }
+  // .catch((error) => res.send(error))
+})
 
 fsApp.post('/deletePost', cors({origin: URLs.local}), async (req, res) => {
   let body = JSON.parse(req.body)
@@ -562,88 +654,6 @@ fsApp.post('/updateBids', cors({origin: URLs.local}), async (req,res) => {
   }
 })
 
-fsApp.post('/setPost', cors({origin: URLs.local}), async (req,res) => {
-  let body = JSON.parse(req.body)
-  for (i in body.data) {
-    const post = body.data[i]
-    admin.firestore()
-    .collection(`${body.dept}-posts`)
-    .doc(post.id)
-    .set(post,{merge:true})
-  }
-  if (body.pos.group === "misc") {
-    admin.firestore()
-    .collection(body.dept)
-    .doc('rota')
-    .collection('archive')
-    .doc(body.archive)
-    .get()
-    .then(async (doc) => {
-      let archiveUpdate = {}
-      if (doc.exists) {
-        archiveUpdate = structuredClone(doc.data())
-        let rowUpdate = {}
-        let active = false
-        archiveUpdate[body.data[0].shift].rows.filter((row) => {
-          if (row.id === body.pos.id) {
-            active = true
-            rowUpdate = structuredClone(row)
-            body.data.map((post) => {
-              let day = new Date(post.date).getDay()
-              if (day === 0) {
-                rowUpdate[7] = post.id
-              } else {
-                rowUpdate[day] = post.id
-              }
-            })
-            // console.log(rowUpdate)
-            archiveUpdate[body.data[0].shift].rows[i] = rowUpdate
-          }
-        })
-        if (!active) {
-          rowUpdate = {
-            id: body.pos.id,
-            label: body.pos.label,
-            color: body.data[0].color,
-            group: body.pos.group,
-            1: '',
-            2: '',
-            3: '',
-            4: '',
-            5: '',
-            6: '',
-            7: ''
-          }
-          body.data.map((post) => {
-            let day = new Date(post.date).getDay()
-            if (day === 0) {
-              rowUpdate[7] = post.id
-            } else {
-              rowUpdate[day] = post.id
-            }
-          })
-          archiveUpdate[body.data[0].shift].rows.push(rowUpdate)
-        }
-      } else {
-        // create archive doc
-        return res.json(JSON.stringify({message: "Archive doc not found"})).send()
-      }
-      await admin.firestore()
-      .collection(body.dept)
-      .doc('rota')
-      .collection('archive')
-      .doc(body.archive)
-      .set(archiveUpdate)
-      .then(() => {
-        return res.json(JSON.stringify({message: "Operation complete, archive update"})).send()
-      })
-    })
-  } else {
-    return res.json(JSON.stringify({message: "Operation complete, no archive update"})).send()
-  }
-  // .catch((error) => res.send(error))
-})
-
 fsApp.post('/deleteDoc', cors({origin: URLs.local}), async (req, res) => {
   let obj = JSON.parse(req.body)
   await admin.firestore()
@@ -828,10 +838,7 @@ exports.pubSub = functions.https.onRequest(async (req, res) => {
               for (const key in row.data[day][shift.id]) {
                 if (key === week.toString()) {
                   // set the archiveRow.data to the rotation data for the week
-                  archiveRow.data[day] = {
-                    ...archiveRow.data[day],
-                    value: rota.fields[shift.id][row.group][row.data[day][shift.id][key]],
-                  }
+                  archiveRow.data[day] = rota.fields[shift.id][row.group][row.data[day][shift.id][key]]
                 }
               }
             }

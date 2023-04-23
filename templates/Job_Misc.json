@@ -1,0 +1,9 @@
+{
+    "label": "{DISPLAY NAME}",
+    "id": "{ID}",
+    "align": "center",
+    "{SHIFT A KEY}": true,
+    "{SHIFT B KEY}": true,
+    "order": "{INT, Display order}",
+    "group": "misc"
+  }

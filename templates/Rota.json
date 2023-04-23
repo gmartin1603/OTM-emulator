@@ -1,0 +1,75 @@
+{
+  "id": "rota",
+  "order": 0,
+  "start": "{INT, Rotation start date in milliseconds}",
+  "length": "{INT, Number of weeks in rotation}",
+  "groups": ["{GROUP A}", "{GROUP B}", "misc"],
+  "dept": "{DEPT NAME}",
+  "fields": {
+    "{SHIFT A}": {
+      "{GROUP A}": { "1A": "{EE NAME}", "1B": "{EE NAME}", "1C": "{EE NAME}" },
+      "{GROUP B}": { "1D": "{EE NAME}", "1E": "{EE NAME}", "1F": "{EE NAME}", "1G": "{EE NAME}" }
+    },
+    "SHIFT B": {
+      "{GROUP A}": { "2B": "{EE NAME}", "2C": "{EE NAME}", "2A": "{EE NAME}" },
+      "{GROUP B}": { "2D": "{EE NAME}", "2E": "{EE NAME}", "2F": "{EE NAME}" }
+    },
+    "SHIFT C": {
+      "{GROUP A}": { "3C": "{EE NAME}", "3A": "{EE NAME}", "3B": "{EE NAME}" },
+      "{GROUP B}": { "3D": "{EE NAME}", "3E": "{EE NAME}", "3G": "{EE NAME}", "3F": "{EE NAME}" }
+    }
+  },
+  "shifts": {
+    "{SHIFT A}": {
+      "color": {
+        "{GROUP A}": ["rgb(253, 254, 254)", "rgb(253, 254, 254, 0.8)"],
+        "{GROUP B}": ["rgb(144, 233, 233)", "rgb(144, 233, 233, 0.8)"],
+        "misc": ["rgb(9, 189, 149 )", "rgb(9, 189, 149, 0.8)"]
+      },
+      "id": "{SHIFT A}",
+      "label": "{DISPLAY NAME}",
+      "segs": {
+        "one": "{FIRST SEGMENT}",
+        "two": "{SECOND SEGMENT}",
+        "full": "{FULL SHIFT}"
+      },
+      "order": "{INT, Display order of shift}",
+      "start": "{INT, hour of day shift starts (24 hour clock)}",
+      "end": "{INT, hour of day shift ends (24 hour clock)}"
+    },
+    "{SHIFT B}": {
+      "color": {
+        "{GROUP A}": ["rgb(253, 254, 254)", "rgb(253, 254, 254, 0.8)"],
+        "{GROUP B}": ["rgb(144, 233, 233)", "rgb(144, 233, 233, 0.8)"],
+        "misc": ["rgb(9, 189, 149 )", "rgb(9, 189, 149, 0.8)"]
+      },
+      "id": "second",
+      "label": "2nd Shift",
+      "segs": {
+        "one": "3 PM - 7 PM",
+        "two": "7 PM - 11 PM",
+        "full": "3 PM - 11 PM"
+      },
+      "order": 2,
+      "start": 15,
+      "end": 23
+    },
+    "{SHIFT C}": {
+      "color": {
+        "{GROUP A}": ["rgb(253, 254, 254)", "rgb(253, 254, 254, 0.8)"],
+        "{GROUP B}": ["rgb(144, 233, 233)", "rgb(144, 233, 233, 0.8)"],
+        "misc": ["rgb(9, 189, 149 )", "rgb(9, 189, 149, 0.8)"]
+      },
+      "id": "third",
+      "label": "3rd Shift",
+      "segs": {
+        "one": "11 PM - 3 AM",
+        "two": "3 AM - 7 AM",
+        "full": "11 PM - 7 AM"
+      },
+      "order": 3,
+      "start": 23,
+      "end": 7
+    }
+  }
+}

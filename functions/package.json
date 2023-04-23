@@ -1,5 +1,6 @@
 {
   "name": "functions",
+  "version": "4.3.0",
   "description": "Cloud Functions for Firebase",
   "scripts": {
     "serve": "firebase serve --only functions",

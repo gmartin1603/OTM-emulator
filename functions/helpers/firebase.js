@@ -4,10 +4,8 @@ require('dotenv').config()
 const serviceAccount = require("../private/overtime-management-83008-firebase-adminsdk-q8kc2-1956d61a57.json");
 
 if (process.env.NODE_ENV == 'dev') {
-  url = "http://localhost:3000"
   initializeApp()
 } else {
-  url = "https://overtime-management-83008.web.app"
   //Admin SDK init
   initializeApp({
     credentials: serviceAccount

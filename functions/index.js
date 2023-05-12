@@ -46,7 +46,7 @@ app.post('/newUser',cors({origin: url}), (req, res) => {
     .doc(userRecord.uid)
     .set(obj.profile)
     .then(() => {
-      res.json(JSON.stringify({message: "User profile written successfully"})).send()
+      return res.json(JSON.stringify({message: "User profile written successfully"})).send()
     })
     .catch((error) => {
       console.log('Error creating new user profile:', error)

@@ -1,31 +1,28 @@
 const functions = require("firebase-functions");
-const {getAuth} = require('firebase-admin/auth');
-const { initializeApp } = require('firebase-admin/app');
-const admin = require('firebase-admin');
+const { getAuth } = require('firebase-admin/auth');
+const { db, admin } = require('./helpers/firebase');
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
+const buildArchive = require("./helpers/buildArchive");
+const copyToLocal = require("./dev_routes/copyToLocal");
+const writeToFirestore = require("./dev_routes/writeToFirestore");
+const deleteOldPosts = require("./dev_routes/deleteOldPosts");
 require('dotenv').config()
 
-const URLs = {local:true ,prod:"https://overtime-management-83008.web.app"}
+let url = ""
+if (process.env.NODE_ENV == 'dev') {
+  url = "http://localhost:3000"
+} else {
+  url = "https://overtime-management-83008.web.app"
+}
 
+//******* userApp start ************** */
 //Express init
 const app = express();
-app.use('*' ,cors({origin:URLs.local}));
+app.use('*' ,cors({origin: url}));
 
-//Admin SDK init (comment out for local emulator)
-// const serviceAccount = require("./private/overtime-management-83008-firebase-adminsdk-q8kc2-1956d61a57.json");
-initializeApp(
-  // {
-  //   credentials: serviceAccount
-  // }
-);
 
-const auth = getAuth();
-const db = admin.firestore();
-//******* userApp start ************** */
-
-app.get('/resetPass', cors({origin: URLs.local}), (req, res) => {
+app.get('/resetPass', cors({origin: url}), (req, res) => {
   const email = req.body
   getAuth()
   .generatePasswordResetLink(email)
@@ -34,7 +31,7 @@ app.get('/resetPass', cors({origin: URLs.local}), (req, res) => {
   })
 })
 
-app.post('/newUser',cors({origin: URLs.local}), (req, res) => {
+app.post('/newUser',cors({origin: url}), (req, res) => {
   let obj = JSON.parse(req.body);
   console.log(obj);
 
@@ -48,9 +45,13 @@ app.post('/newUser',cors({origin: URLs.local}), (req, res) => {
     .collection("users")
     .doc(userRecord.uid)
     .set(obj.profile)
-    .then((doc) => {
-      res.send(`${doc.id} Written Successfully`)
+    .then(() => {
+      res.json(JSON.stringify({message: "User profile written successfully"})).send()
     })
+    .catch((error) => {
+      console.log('Error creating new user profile:', error)
+      return res.json(JSON.stringify({error: error, message: "Error creating new user profile"})).send()
+    });
   })
   .catch((error) => {
     console.log('Error creating new user:', error)
@@ -58,7 +59,7 @@ app.post('/newUser',cors({origin: URLs.local}), (req, res) => {
   });
 })
 
-app.post('/updateUser', cors({origin:URLs.local}), async (req, res) => {
+app.post('/updateUser', cors({origin: url}), async (req, res) => {
   let obj = JSON.parse(req.body)
   console.log(obj)
 
@@ -88,7 +89,7 @@ app.post('/updateUser', cors({origin:URLs.local}), async (req, res) => {
 })
 
 //get user profile by firebase uid
-app.get('/getUser', cors({origin:URLs.local}), async (req, res) => {
+app.get('/getUser', cors({origin: url}), async (req, res) => {
   let uid = req.body;
   console.log(uid)
 
@@ -101,7 +102,7 @@ app.get('/getUser', cors({origin:URLs.local}), async (req, res) => {
   })
 });
 
-app.post('/deleteUser', cors({origin:URLs.local}), async (req, res) => {
+app.post('/deleteUser', cors({origin: url}), async (req, res) => {
   //delete firestore profile doc
   const deleteProfile = () => {
   admin.firestore()
@@ -138,381 +139,67 @@ const fsApp = express()
 
 // ------------------- Dev Tools ---------------- //
 
-fsApp.post('/copyToLocal', cors({origin: URLs.local}), async (req,res) => {
-  const body = JSON.parse(req.body)
-  const LIMIT = 200
-  await admin.firestore()
-  .collection(body.coll)
-  .where("date", ">=", body.start)
-  .where("date", "<=", body.end)
-  .limit(LIMIT)
-  .get()
-  .then((docSnap) => {
-    if (docSnap.empty) {
-      console.log("No matching documents.")
-      return res.json(JSON.stringify({message: "No matching documents."})).send()
-    } else if (docSnap.size === LIMIT) {
-      console.log("Query limit reached.")
-      return res.json(JSON.stringify({message: "Query limit reached."})).send()
-    } else {
-      docSnap.forEach((doc) => {
-        let data = doc.data()
-        fs.writeFile(`C:\/Users\/georg\/Documents\/data\/${body.coll}/${doc.id}.json`, JSON.stringify(data), (err) => {
-          if (err) {
-            console.log(err)
-          }
-        })
-      })
-      return res.json(JSON.stringify({message:`"Success", ${docSnap.size} documents retrieved`})).send()
-    }
-  })
-  .catch((error) => {
-    console.log(error)
-    res.json(JSON.stringify(error)).send()
-  })
-})
+// fsApp.post('/copyToLocal', cors({origin: "http://localhost:3000"}), async (req,res) => (copyToLocal(req,res)))
 
-fsApp.post('/writeToFirestore', cors({origin: URLs.local}), async (req,res) => {
-  const body = JSON.parse(req.body)
-  fs.readdir(`C:\/Users\/georg\/Documents\/data\/${body.coll}`, (err, docs) => {
-    if (err) {
-      console.log(err)
-      return res.json(JSON.stringify({message:"Error reading local folder"})).send()
-    } else {
-      docs.forEach((doc) => {
-        fs.readFile(`C:\/Users\/georg\/Documents\/data\/${body.coll}/${doc}`, async (err, data) => {
-          if (err) {
-            console.log(err)
-            return res.json(JSON.stringify({message:"Error reading local documents"})).send()
-          } else {
-            let obj = JSON.parse(data)
-            await admin.firestore()
-            .collection(body.coll)
-            .doc(obj.id)
-            .set(obj, {merge:true})
-            .catch((error) => {
-              console.log(error)
-            })
-          }
-        })
-      })
-    }
-    return res.json({message:"Success"}).send()
-  })
-})
+// fsApp.post('/writeToFirestore', cors({origin: "http://localhost:3000"}), async (req,res) => (writeToFirestore(req,res)))
 
-fsApp.post('/updatePosts', cors({origin: URLs.local}), async (req,res) => {
-  const body = JSON.parse(req.body)
-  const LIMIT = 400
-  let updated = []
-  await admin.firestore()
-  .collection(body.coll)
-  .where("date", ">=", body.start)
-  .where("date", "<=", body.end)
-  .limit(LIMIT)
-  .get()
-  .then((docSnap) => {
-    if (docSnap.empty) {
-      return res.send(JSON.stringify({message:"No Documents Found"}))
-    } else if (docSnap.size === LIMIT){
-      return res.send(JSON.stringify({mesage:"Operation aborted. Too many documents to update. Please narrow the date range."}))
-    } else {
-      console.log("Checking " + docSnap.size + " documents...")
-      docSnap.forEach(async (doc) => {
-        let obj = new Object(doc.data())
-        switch (obj.shift) {
-          case 0:
-            if (obj.norm === "Siri") {
-              obj.shift = "11-7"
-              obj.id = `${obj.pos} ${obj.date} 11-7`
-              updated.push(obj)
-            } else {
-              obj.shift = "first"
-              obj.id = `${obj.pos} ${obj.date} first`
-              updated.push(obj)
-            }
-            break
-          case 1:
-            obj.shift = "second"
-            obj.id = `${obj.pos} ${obj.date} second`
-            updated.push(obj)
-            break
-          case 2:
-            obj.shift = "third"
-            obj.id = `${obj.pos} ${obj.date} third`
-            updated.push(obj)
-            break
-          case 3:
-            obj.shift = "night"
-            obj.id = `${obj.pos} ${obj.date} night`
-            updated.push(obj)
-            break
-          default:
-            const lastChar = parseInt(doc.id.charAt(doc.id.length-1))
-            if (Number.isInteger(lastChar) && lastChar < 6) {
-              // console.log(doc.id)
-              obj.id = `${obj.pos} ${obj.date} ${obj.shift}`
-              updated.push(obj)
-            }
-        }
-      })
-    }
-  })
-  .catch((error) => {
-    console.log(error)
-    return res.status(error?.status).json(JSON.stringify(error)).send()
-  })
+// fsApp.post('/updatePosts', cors({origin: "http://localhost:3000"}), async (req,res) => (updatePosts(req,res)))
 
-  if (updated.length > 0) {
-    console.log("Updating " + updated.length + " documents...")
-    for (const i in updated) {
-      const post = updated[i]
-      await admin.firestore()
-      .collection(body.coll)
-      .doc(post.id)
-      .set(post, {merge: true})
-      .catch((error) => {
-        console.log(`error: ${error.status} at ${post.id}`)
-      })
-    }
-
-    console.log("Success!")
-    return res.json(JSON.stringify({message:`Updated ${updated.length} postings`})).send()
-
-  } else {
-    return res.json(JSON.stringify({message:"No documents updated"})).send()
-  }
-})
-
-fsApp.post('/deleteOldPosts', cors({origin: URLs.local}), async (req,res) => {
-  const body = JSON.parse(req.body)
-  const LIMIT = 400
-  let deleted = []
-  await admin.firestore()
-  .collection(body.coll)
-  .where("date", ">=", body.start)
-  .where("date", "<=", body.end)
-  .limit(LIMIT)
-  .get()
-  .then((docSnap) => {
-    if (docSnap.empty) {
-      console.log("No Documents Found")
-      return res.json({message:"No Documents Found"}).sendStatus(200)
-    } else if (docSnap.size === LIMIT){
-      console.log("Too many documents to update. Please narrow the date range.")
-      return res.send(JSON.stringify({mesage:"Operation aborted. Too many documents to update. Please narrow the date range."}))
-    } else {
-      console.log("filtering...", docSnap.size, "documents...")
-      docSnap.forEach((doc) => {
-        const lastChar = parseInt(doc.id.charAt(doc.id.length-1))
-        if (Number.isInteger(lastChar) && lastChar < 6) {
-          deleted.push(doc.id)
-          // console.log(doc.id)
-        }
-      })
-    }
-  })
-  .catch((error) => {
-    console.log(error)
-    res.status(error?.status).send(JSON.stringify(error))
-  })
-
-  if (deleted.length > 0) {
-  console.log("Deleting " + deleted.length + " documents...")
-  for (const i in deleted) {
-    // console.log(deleted[i])
-    await admin.firestore()
-    .collection(body.coll)
-    .doc(deleted[i])
-    .delete()
-    .catch((error) => {
-      console.log(`error: ${error.status} at ${deleted[i]}`)
-    })
-  }
-  } else {
-    console.log("No documents deleted")
-  }
-
-  // console.log("Success!")
-  return res.json(JSON.stringify({message:`Deleted ${deleted.length} postings`})).send()
-})
+// fsApp.post('/deleteOldPosts', cors({origin: "http://localhost:3000"}), async (req,res) => (deleteOldPosts(req,res)))
 // --------------------------------------------------------- //
-fsApp.post('/buildArchive', cors({origin: URLs.local}), async (req,res) => {
-  const body = JSON.parse(req.body)
-  let rota = {};
-  let jobs = [];
-  let dept = body.dept
-  const today = new Date(body.start);
-  today.setHours(7)
-  // console.log(`Today => ${today}`)
 
-  const findWeek = (today, start, rotaLength) => {
-    let timeSinceStart = today.getTime() - start;
-    let weeksSince = timeSinceStart / (24 * 60 * 60 * 1000 * 7);
-    let weekNumber = Math.ceil(weeksSince % rotaLength);
+fsApp.post('/buildArchive', cors({origin: url}), async (req,res) => {
+  const {dept, start} = JSON.parse(req.body)
 
-    return weekNumber;
-  }
-  const sortShifts = (shiftObj) => {
-    const keys = Object.keys(shiftObj)
-    let shiftArr = []
-    for (const prop in keys) {
-      shiftArr.push(shiftObj[keys[prop]])
-    }
-    shiftArr.sort((a, b) => {
-      if (a.order < b.order) {
-          return -1
-      }
-      if (a.order > b.order) {
-          return 1
-      }
-      return 0
-    })
-    return shiftArr
-  }
+  const obj = await buildArchive(dept, start)
 
-  const buildRows = (shift, posts, week) => {
-    let arr = []
-    jobs.length > 0 &&
-    // loop through all jobs
-    jobs.map((job) => {
-      let archiveRow = structuredClone(job)
-      // if shift is true in job
-      if (job[shift.id]){
-        let show = true
-        // set color
-        let color = shift.color[job.group][0]
-        const prevRow = arr[arr.length - 1]
-        // if previous job exists
-        if (arr.length > 0) {
-          if (prevRow.group === job.group) {
-            if (prevRow.color === shift.color[job.group][0]) {
-              color = shift.color[job.group][1]
-            } else {
-              color = shift.color[job.group][0]
-            }
-          }
-        }
-        archiveRow.data = {
-          group: job.group,
-          label: job.label,
-          color: color,
-          id: job.id,
-          1:'',
-          2:'',
-          3:'',
-          4:'',
-          5:'',
-          6:'',
-          7:''
-        } //mon to sun
-        // if not "misc"
-        if (job.data) {
-          // for each day in the job
-          for (const day in job.data) {
-            // if the job has rotation data for the shift
-            if (job.data[day][shift.id]) {
-              // for each week in the rotation
-              for (const key in job.data[day][shift.id]) {
-                if (key === week.toString()) {
-                  // set the archiveRow.data to the rotation data for the week
-                  archiveRow.data[day] = rota.fields[shift.id][job.group][job.data[day][shift.id][key]]
-                }
-              }
-            }
-          }
-        } else {
-          show = false
-          for (const key in posts) {
-            const post = posts[key]
-            // console.log(post)
-            if (post.shift === shift.id) {
-              if (post.pos === job.id) {
-                // rowPosts[post.date] = post
-                show = true
-                let date = new Date(post.date)
-                switch (date.getDay()) {
-                  case 0:
-                    archiveRow.data[7] =  post.id
-                    break;
-                  default:
-                    archiveRow.data[date.getDay()] = post.id
-                }
-              }
-            }
-          }
-        }
-
-        if (show) {
-          arr.push(archiveRow.data)
-        }
-      }
-    })
-    return arr
-  }
-
-  // Get posts for the week to determine if "misc" row should be shown
-  const posts = await db.collection(`${dept}-posts`)
-  .where('date', '>=', today.getTime())
-  .where('date', '<=', today.getTime() + (7 * (24 * 60 * 60 * 1000)))
-  .get()
-  .then((snapshot) => {
-    let obj = {}
-    snapshot.forEach((doc) => {
-      obj[doc.id] = doc.data()
-      admin.firestore().collection(`${dept}-posts`).doc(doc.id).set({locked: true}, {merge: true})
-      .catch((error) => {
-        console.log(`Error locking post ${doc.id}`, error)
-      })
-    });
-    return obj
-  })
-  .catch((err) => {
-    console.log('Error getting documents', err);
-  });
-
-  await db.collection(dept)
-  .orderBy('order')
-  .get()
-  .then((snapshot) => {
-    snapshot.forEach((doc) => {
-      if (doc.data().id === "rota") {
-        rota = doc.data();
-      } else {
-        jobs.push(doc.data())
-      }
-    });
-  })
-  .catch((err) => {
-    console.log('Error getting documents', err);
-  });
-
-  let obj = {};
-
-  const week = findWeek(today, rota.start, rota.length);
-  const shifts = sortShifts(rota.shifts)
-
-  shifts.map(shift => {
-    let rows = buildRows(shift, posts, week)
-    obj[shift.id] = {shift: shift, rows: rows}
-  })
-
-  await db.collection(dept).doc('rota').collection('archive').doc(`${today.toDateString()}`).set(obj)
+  await db.collection(dept).doc('rota').collection('archive').doc(`${new Date(start).toDateString()}`).set(obj)
   .then(() => {
-    console.log(`Doc written to ${dept}/rota/archive/${today.toDateString()}`)
+    console.log(`Doc written to ${dept}/rota/archive/${new Date(start).toDateString()}`)
   })
   .catch((error) => {
     console.error('Error writing document: ', error);
+    return res.json(JSON.stringify({message: `Error writing document: ${error}`})).send()
   });
 
-  return res.json(JSON.stringify({message: `${today.toDateString()} successfully archived`})).send()
+  return res.json(JSON.stringify({message: `${new Date(start).toDateString()} successfully archived`})).send()
 })
 
-fsApp.post('/setPost', cors({origin: URLs.local}), async (req,res) => {
+fsApp.post('/updateArchive', cors({origin: url}), async (req, res) => {
+  const body = JSON.parse(req.body)
+  // console.log(body)
+  await db.collection(body.dept)
+  .doc('rota')
+  .collection('archive')
+  .doc(body.archive)
+  .get()
+  .then(async (doc) => {
+      console.log(doc.id)
+      let archiveUpdate = structuredClone(doc.data())
+      archiveUpdate[body.shift].rows = body.rows
+      await db.collection(body.dept)
+      .doc('rota')
+      .collection('archive')
+      .doc(body.archive)
+      .set(archiveUpdate)
+      .catch((error) => {
+          console.log(error)
+          return res.json(JSON.stringify({error: error, message: "Error updating archive"})).send()
+      })
+
+      return res.json(JSON.stringify({message: "Archive updated successfully"})).send()
+  })
+  .catch((error) => {
+      console.log(error)
+      return res.json(JSON.stringify({error: error, message: "Error getting archive"})).send()
+  })
+})
+
+fsApp.post('/setPost', cors({origin: url}), (req, res) => {
   let body = JSON.parse(req.body)
   for (i in body.data) {
     const post = body.data[i]
-    admin.firestore()
+    db
     .collection(`${body.dept}-posts`)
     .doc(post.id)
     .set(post,{merge:true})
@@ -521,7 +208,7 @@ fsApp.post('/setPost', cors({origin: URLs.local}), async (req,res) => {
     })
   }
   if (body.pos.group === "misc" && !body.data[0].lastMod) {
-    admin.firestore()
+    db
     .collection(body.dept)
     .doc('rota')
     .collection('archive')
@@ -530,6 +217,7 @@ fsApp.post('/setPost', cors({origin: URLs.local}), async (req,res) => {
     .then(async (doc) => {
       let archiveUpdate = {}
       if (doc.exists) {
+        // update existing archive
         archiveUpdate = structuredClone(doc.data())
         let rowUpdate = {}
         let active = false
@@ -573,207 +261,33 @@ fsApp.post('/setPost', cors({origin: URLs.local}), async (req,res) => {
           })
           archiveUpdate[body.data[0].shift].rows.push(rowUpdate)
         }
+
+        await db
+        .collection(body.dept)
+        .doc('rota')
+        .collection('archive')
+        .doc(body.archive)
+        .set(archiveUpdate)
+        .then(() => {
+          return res.json(JSON.stringify({message: "Operation complete, archive update"})).send()
+        })
+        .catch((error) => {
+          return res.json(JSON.stringify({message: "Error", error: error})).send()
+        })
       } else {
         // create archive doc
-        const dept = 'csst'
-        let rota = {};
-        let jobs = [];
-        const today = new Date(body.archive);
-        today.setHours(7)
-        console.log(`Today => ${today}`)
+        const obj = await buildArchive(body.dept, body.archive)
 
-        const findMon = (today) => {
-          //Daylight Savings check
-          const jan = new Date(today.getFullYear(), 0, 1);
-          // console.log(`Daylight Savings => ${today.getTimezoneOffset() < jan.getTimezoneOffset()}`)
-          let day = 24 * 60 * 60 * 1000
-          //  time = today - milliseconds past midnight + 1 hour if today.getTimezoneOffset < jan.getTimezoneOffset
-          let time = (today - ((today.getHours() * 60 * 60 * 1000) + (today.getMinutes() * 60 * 1000) + (today.getSeconds() * 1000) + today.getMilliseconds()))+(today.getTimezoneOffset() < jan.getTimezoneOffset()? (60*60*1000) : 0)
-          let d = today.getDay()
-          if (d === 0) {
-            d = 7
-          }
-          //monday = time - (day of the week * ms in a day) + 1 day in ms
-          let mon = time - (d * day) + day
-
-          return new Date(mon)
-        }
-
-        const monday = findMon(today)
-
-        const findWeek = (today, start, rotaLength) => {
-          let timeSinceStart = today.getTime() - start;
-          let weeksSince = timeSinceStart / (24 * 60 * 60 * 1000 * 7);
-          let weekNumber = Math.ceil(weeksSince % rotaLength);
-
-          return weekNumber;
-        }
-        const sortShifts = (shiftObj) => {
-          const keys = Object.keys(shiftObj)
-          let shiftArr = []
-          for (const prop in keys) {
-            shiftArr.push(shiftObj[keys[prop]])
-          }
-          shiftArr.sort((a, b) => {
-            if (a.order < b.order) {
-                return -1
-            }
-            if (a.order > b.order) {
-                return 1
-            }
-            return 0
-          })
-          return shiftArr
-        }
-
-        const buildRows = (shift, posts, week) => {
-          let arr = []
-          jobs.length > 0 &&
-          // loop through all rows
-          jobs.map((job) => {
-            let archiveRow = structuredClone(job)
-            // if shift is true in job
-            if (job[shift.id]){
-              let show = true
-              // set color
-              let color = shift.color[job.group][0]
-              const prevRow = arr[arr.length - 1]
-              // if previous job exists
-              if (arr.length > 0) {
-                if (prevRow.group === job.group) {
-                  if (prevRow.color === shift.color[job.group][0]) {
-                    color = shift.color[job.group][1]
-                  } else {
-                    color = shift.color[job.group][0]
-                  }
-                }
-              }
-              archiveRow.data = {
-                group: job.group,
-                label: job.label,
-                color: color,
-                id: job.id,
-                1:'',
-                2:'',
-                3:'',
-                4:'',
-                5:'',
-                6:'',
-                7:''
-              } //mon to sun
-              // if not "misc"
-              if (job.data) {
-                // for each day in the job
-                for (const day in job.data) {
-                  // if the job has rotation data for the shift
-                  if (job.data[day][shift.id]) {
-                    // for each week in the rotation
-                    for (const key in job.data[day][shift.id]) {
-                      if (key === week.toString()) {
-                        // set the archiveRow.data to the rotation data for the week
-                        archiveRow.data[day] = rota.fields[shift.id][job.group][job.data[day][shift.id][key]]
-                      }
-                    }
-                  }
-                }
-              } else {
-                show = false
-                for (const key in posts) {
-                  const post = posts[key]
-                  // console.log(post)
-                  if (post.shift === shift.id) {
-                    if (post.pos === job.id) {
-                      // rowPosts[post.date] = post
-                      show = true
-                      let date = new Date(post.date)
-                      switch (date.getDay()) {
-                        case 0:
-                          archiveRow.data[7] =  post.id
-                          break;
-                        default:
-                          archiveRow.data[date.getDay()] = post.id
-                      }
-                    }
-                  }
-                }
-              }
-
-              if (show) {
-                arr.push(archiveRow.data)
-              }
-            }
-          })
-          return arr
-        }
-
-        // Get posts for the week to determine if "misc" row should be shown
-        const posts = await db.collection(`${dept}-posts`)
-        .where('date', '>=', monday.getTime())
-        .where('date', '<=', monday.getTime() + (7 * (24 * 60 * 60 * 1000)))
-        .get()
-        .then((snapshot) => {
-          let obj = {}
-          snapshot.forEach((doc) => {
-            obj[doc.id] = doc.data()
-            admin.firestore().collection(`${dept}-posts`).doc(doc.id).set({locked: true}, {merge: true})
-            .catch((error) => {
-              console.log(`Error locking post ${doc.id}`, error)
-            })
-          });
-          return obj
-        })
-        .catch((err) => {
-          console.log('Error getting documents', err);
-        });
-
-        await db.collection(dept)
-        .orderBy('order')
-        .get()
-        .then((snapshot) => {
-          snapshot.forEach((doc) => {
-            if (doc.data().id === "rota") {
-              rota = doc.data();
-            } else {
-              jobs.push(doc.data())
-            }
-          });
-        })
-        .catch((err) => {
-          console.log('Error getting documents', err);
-        });
-
-        let obj = {};
-
-        const week = findWeek(today, rota.start, rota.length);
-        const shifts = sortShifts(rota.shifts)
-
-        shifts.map(shift => {
-          let rows = buildRows(shift, posts, week)
-          obj[shift.id] = {shift: shift, rows: rows}
-        })
-
-        await db.collection(dept).doc('rota').collection('archive').doc(`${monday.toDateString()}`).set(obj)
+        await db.collection(body.dept).doc('rota').collection('archive').doc(body.archive).set(obj)
         .then(() => {
-          console.log(`Doc written to ${dept}/rota/archive/${monday.toDateString()}`)
+          console.log(`Doc written to ${body.dept}/rota/archive/${body.archive}`)
         })
         .catch((error) => {
           console.error('Error writing document: ', error);
+          return res.json(JSON.stringify({message: "Error writing archive doc", error: error})).send()
         });
-        return res.json(JSON.stringify({message: "Archive doc created"})).send()
+        return res.json(JSON.stringify({message: "Operation complete archive doc created"})).send()
       }
-
-      await admin.firestore()
-      .collection(body.dept)
-      .doc('rota')
-      .collection('archive')
-      .doc(body.archive)
-      .set(archiveUpdate)
-      .then(() => {
-        return res.json(JSON.stringify({message: "Operation complete, archive update"})).send()
-      })
-      .catch((error) => {
-        return res.json(JSON.stringify({message: "Error", error: error})).send()
-      })
     })
     .catch((error) => {
       console.log(error)
@@ -782,13 +296,12 @@ fsApp.post('/setPost', cors({origin: URLs.local}), async (req,res) => {
   } else {
     return res.json(JSON.stringify({message: "Operation complete, no archive update"})).send()
   }
-  // .catch((error) => res.send(error))
 })
 
-fsApp.post('/deletePost', cors({origin: URLs.local}), async (req, res) => {
+fsApp.post('/deletePost', cors({origin: url}), async (req, res) => {
   let body = JSON.parse(req.body)
   let obj = {}
-  await admin.firestore()
+  await db
   .collection(`${body.dept}-posts`)
   .doc(body.post).delete()
   .then(() => {
@@ -798,13 +311,13 @@ fsApp.post('/deletePost', cors({origin: URLs.local}), async (req, res) => {
     res.status(error?.status).send(error)
   })
   if (body.misc) {
-    await admin.firestore()
+    await db
     .collection(body.dept)
     .doc('rota')
     .collection('archive')
     .doc(body.archive)
     .get()
-    .then((doc) => {
+    .then(async (doc) => {
       if (doc.exists) {
         obj = new Object(doc.data())
         obj[body.shift].rows.map((row) => {
@@ -827,31 +340,29 @@ fsApp.post('/deletePost', cors({origin: URLs.local}), async (req, res) => {
             }
           }
         })
+        await db
+        .collection(body.dept)
+        .doc('rota')
+        .collection('archive')
+        .doc(body.archive)
+        .set(obj)
+        .then(() => {
+          console.log(`${body.archive} Updated!`)
+        })
+        .catch((error) => {
+          console.log(error)
+        })
+        return res.json(JSON.stringify({message: "Operation Complete, archive updated"})).send()
       } else {
         return res.json(JSON.stringify({message: "No Archive Document Found"})).send()
       }
     })
-    await admin.firestore()
-    .collection(body.dept)
-    .doc('rota')
-    .collection('archive')
-    .doc(body.archive)
-    .set(obj)
-    .then(() => {
-      console.log(`${body.archive} Updated!`)
-    })
-    .catch((error) => {
-      console.log(error)
-    })
-    return res.json(JSON.stringify({message: "Operation Complete, archive update"})).send()
   } else {
     return res.json(JSON.stringify({message: "Operation Complete, no archive update"})).send()
   }
-
-
 })
 
-fsApp.post('/deleteJob', cors({origin: URLs.local}), async (req,res) => {
+fsApp.post('/deleteJob', cors({origin: url}), async (req,res) => {
   let body = JSON.parse(req.body)
 
   for (const i in body.posts) {
@@ -880,7 +391,7 @@ fsApp.post('/deleteJob', cors({origin: URLs.local}), async (req,res) => {
   })
 })
 
-fsApp.post('/mkDoc', cors({origin: URLs.local}), async (req,res) => {
+fsApp.post('/mkDoc', cors({origin: url}), async (req,res) => {
   let load = JSON.parse(req.body)
 
   admin.firestore()
@@ -896,7 +407,7 @@ fsApp.post('/mkDoc', cors({origin: URLs.local}), async (req,res) => {
   })
 })
 
-fsApp.post('/editRota', cors({origin: URLs.local}), async (req,res) => {
+fsApp.post('/editRota', cors({origin: url}), async (req,res) => {
   let body = JSON.parse(req.body)
   admin.firestore()
   .collection(body.dept)
@@ -911,7 +422,7 @@ fsApp.post('/editRota', cors({origin: URLs.local}), async (req,res) => {
   })
 })
 
-fsApp.post('/updateField', cors({origin: URLs.local}), async (req,res) => {
+fsApp.post('/updateField', cors({origin: url}), async (req,res) => {
   let body = JSON.parse(req.body)
 
   const batchWrite = () => {
@@ -934,7 +445,7 @@ fsApp.post('/updateField', cors({origin: URLs.local}), async (req,res) => {
   batchWrite()
 })
 
-fsApp.post('/updateDoc', cors({origin: URLs.local}), async (req,res) => {
+fsApp.post('/updateDoc', cors({origin: url}), async (req,res) => {
   let body = JSON.parse(req.body)
 
   const batchWrite = () => {
@@ -951,15 +462,13 @@ fsApp.post('/updateDoc', cors({origin: URLs.local}), async (req,res) => {
   res.send("update complete")
 })
 
-fsApp.post('/updateBids', cors({origin: URLs.local}), async (req,res) => {
+fsApp.post('/updateBids', cors({origin: url}), async (req,res) => {
   let body = JSON.parse(req.body)
 
-  const getPost = () => {
-    admin.firestore()
-    .collection(body.coll)
+    await db.collection(body.coll)
     .doc(body.doc)
     .get()
-    .then((document) => {
+    .then(async (document) => {
       let doc = document.data()
       // console.log(doc)
       for (const key in doc.seg) {
@@ -997,26 +506,15 @@ fsApp.post('/updateBids', cors({origin: URLs.local}), async (req,res) => {
             doc.seg[key].bids = arr
         }
       }
-      return batchWrite(doc.seg)
-    })
-  }
-
-  const batchWrite = (obj) => {
-    admin.firestore()
-    .collection(body.coll)
-    .doc(body.doc)
-    .set({seg: obj},{merge:true})
-    .then(() => res.send("Update Complete"))
-    .catch((error) => res.send(error))
-  }
-  if (body.down > new Date().getTime()) {
-    getPost()
-  } else {
-    res.send("Posting Closed")
-  }
+      await db.collection(body.coll)
+      .doc(body.doc)
+      .set(doc,{merge:true})
+      .then(() => res.json(JSON.stringify({message: "Signature added to posting"})).send())
+      .catch((error) => res.json(JSON.stringify({message: "Error adding signature", error: error})).send())
+  })
 })
 
-fsApp.post('/deleteDoc', cors({origin: URLs.local}), async (req, res) => {
+fsApp.post('/deleteDoc', cors({origin: url}), async (req, res) => {
   let obj = JSON.parse(req.body)
   await admin.firestore()
   .collection(obj.coll)
@@ -1030,7 +528,7 @@ fsApp.post('/deleteDoc', cors({origin: URLs.local}), async (req, res) => {
   })
 })
 
-fsApp.post('/deleteDocField', cors({origin: URLs.local}), async (req, res) => {
+fsApp.post('/deleteDocField', cors({origin: url}), async (req, res) => {
   let obj = JSON.parse(req.body)
   console.log(obj)
 
@@ -1095,193 +593,20 @@ exports.fsApp = functions.https.onRequest(fsApp)
 //   return true;
 // })
 exports.pubSub = functions.https.onRequest(async (req, res) => {
-  const body = JSON.parse(req.body)
-  let rota = {};
-  let jobs = [];
-  let dept = body.dept
-  const today = new Date(body.start);
-  today.setHours(7)
-  console.log(`Today => ${today}`)
+  const {dept, start} = JSON.parse(req.body)
 
-  const findMon = (today) => {
-    //Daylight Savings check
-    const jan = new Date(today.getFullYear(), 0, 1);
-    // console.log(`Daylight Savings => ${today.getTimezoneOffset() < jan.getTimezoneOffset()}`)
-    let day = 24 * 60 * 60 * 1000
-    //  time = today - milliseconds past midnight + 1 hour if today.getTimezoneOffset < jan.getTimezoneOffset
-    let time = (today - ((today.getHours() * 60 * 60 * 1000) + (today.getMinutes() * 60 * 1000) + (today.getSeconds() * 1000) + today.getMilliseconds()))+(today.getTimezoneOffset() < jan.getTimezoneOffset()? (60*60*1000) : 0)
-    let d = today.getDay()
-    if (d === 0) {
-      d = 7
-    }
-    //monday = time - (day of the week * ms in a day) + 1 day in ms
-    let mon = time - (d * day) + day
+  const obj = await buildArchive(dept, start)
 
-    return new Date(mon)
-  }
-
-  const monday = findMon(today)
-
-  const findWeek = (today, start, rotaLength) => {
-    let timeSinceStart = today.getTime() - start;
-    let weeksSince = timeSinceStart / (24 * 60 * 60 * 1000 * 7);
-    let weekNumber = Math.ceil(weeksSince % rotaLength);
-
-    return weekNumber;
-  }
-  const sortShifts = (shiftObj) => {
-    const keys = Object.keys(shiftObj)
-    let shiftArr = []
-    for (const prop in keys) {
-      shiftArr.push(shiftObj[keys[prop]])
-    }
-    shiftArr.sort((a, b) => {
-      if (a.order < b.order) {
-          return -1
-      }
-      if (a.order > b.order) {
-          return 1
-      }
-      return 0
-    })
-    return shiftArr
-  }
-
-  const buildRows = (shift, posts, week) => {
-    let arr = []
-    jobs.length > 0 &&
-    // loop through all jobs
-    jobs.map((job) => {
-      let archiveRow = structuredClone(job)
-      // if shift is true in job
-      if (job[shift.id]){
-        let show = true
-        // set color
-        let color = shift.color[job.group][0]
-        const prevRow = arr[arr.length - 1]
-        // if previous job exists
-        if (arr.length > 0) {
-          if (prevRow.group === job.group) {
-            if (prevRow.color === shift.color[job.group][0]) {
-              color = shift.color[job.group][1]
-            } else {
-              color = shift.color[job.group][0]
-            }
-          }
-        }
-        archiveRow.data = {
-          group: job.group,
-          label: job.label,
-          color: color,
-          id: job.id,
-          1:'',
-          2:'',
-          3:'',
-          4:'',
-          5:'',
-          6:'',
-          7:''
-        } //mon to sun
-        // if not "misc"
-        if (job.data) {
-          // for each day in the job
-          for (const day in job.data) {
-            // if the job has rotation data for the shift
-            if (job.data[day][shift.id]) {
-              // for each week in the rotation
-              for (const key in job.data[day][shift.id]) {
-                if (key === week.toString()) {
-                  // set the archiveRow.data to the rotation data for the week
-                  archiveRow.data[day] = rota.fields[shift.id][job.group][job.data[day][shift.id][key]]
-                }
-              }
-            }
-          }
-        } else {
-          show = false
-          for (const key in posts) {
-            const post = posts[key]
-            // console.log(post)
-            if (post.shift === shift.id) {
-              if (post.pos === job.id) {
-                // rowPosts[post.date] = post
-                show = true
-                let date = new Date(post.date)
-                switch (date.getDay()) {
-                  case 0:
-                    archiveRow.data[7] =  post.id
-                    break;
-                  default:
-                    archiveRow.data[date.getDay()] = post.id
-                }
-              }
-            }
-          }
-        }
-
-        if (show) {
-          arr.push(archiveRow.data)
-        }
-      }
-    })
-    return arr
-  }
-
-  // Get posts for the week to determine if "misc" row should be shown
-  const posts = await db.collection(`${dept}-posts`)
-  .where('date', '>=', today.getTime())
-  .where('date', '<=', today.getTime() + (7 * (24 * 60 * 60 * 1000)))
-  .get()
-  .then((snapshot) => {
-    let obj = {}
-    snapshot.forEach((doc) => {
-      obj[doc.id] = doc.data()
-      admin.firestore().collection(`${dept}-posts`).doc(doc.id).set({locked: true}, {merge: true})
-      .catch((error) => {
-        console.log(`Error locking post ${doc.id}`, error)
-      })
-    });
-    return obj
-  })
-  .catch((err) => {
-    console.log('Error getting documents', err);
-  });
-
-  await db.collection(dept)
-  .orderBy('order')
-  .get()
-  .then((snapshot) => {
-    snapshot.forEach((doc) => {
-      if (doc.data().id === "rota") {
-        rota = doc.data();
-      } else {
-        jobs.push(doc.data())
-      }
-    });
-  })
-  .catch((err) => {
-    console.log('Error getting documents', err);
-  });
-
-  let obj = {};
-
-  const week = findWeek(today, rota.start, rota.length);
-  const shifts = sortShifts(rota.shifts)
-
-  shifts.map(shift => {
-    let rows = buildRows(shift, posts, week)
-    obj[shift.id] = {shift: shift, rows: rows}
-  })
-
-  await db.collection(dept).doc('rota').collection('archive').doc(`${today.toDateString()}`).set(obj)
+  await db.collection(dept).doc('rota').collection('archive').doc(`${new Date(start).toDateString()}`).set(obj)
   .then(() => {
-    console.log(`Doc written to ${dept}/rota/archive/${today.toDateString()}`)
+    console.log(`Doc written to ${dept}/rota/archive/${new Date(start).toDateString()}`)
   })
   .catch((error) => {
     console.error('Error writing document: ', error);
+    return res.json(JSON.stringify({message: `Error writing document: ${error}`})).send()
   });
 
-  return res.send(`${today} Successfully archived`)
+  return res.json(JSON.stringify({message: `${new Date(start).toDateString()} successfully archived`})).send()
 })
 
 //***************** End Pub/Sub ************* */

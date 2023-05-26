@@ -27,7 +27,10 @@ app.get('/resetPass', cors({origin: url}), (req, res) => {
   getAuth()
   .generatePasswordResetLink(email)
   .then((link) => {
-    res.send("Check registered e-mail for reset link")
+    res.json(JSON.stringify({message: "Password reset link sent successfully", link: link})).send()
+  })
+  .catch((error) => {
+    res.json(JSON.stringify({error: error, message: "Error sending password reset link"})).send()
   })
 })
 
@@ -73,18 +76,18 @@ app.post('/updateUser', cors({origin: url}), async (req, res) => {
       await getAuth()
       .updateUser(obj.id, obj.auth)
       .then((userRecord) => {
-        console.log(userRecord.uid+" Updates Successful")
-        res.send("Updates Successful")
+        // console.log(userRecord.uid+" Updates Successful")
+        res.json(JSON.stringify({message: "Auth updates Successful"})).send()
       })
       .catch((error) => {
-        res.send(error.code)
+        res.json(JSON.stringify({error: error, message: "Error updating user auth"})).send()
       })
     } else {
-      res.send("Updates Successful")
+      res.json(JSON.stringify({message: "Profile updates Successful"})).send()
     }
   })
   .catch((error) => {
-    res.send(error.code)
+    res.json(JSON.stringify({error: error, message: "Error updating user profile"})).send()
   })
 })
 
@@ -110,10 +113,10 @@ app.post('/deleteUser', cors({origin: url}), async (req, res) => {
   .doc(req.body).delete()
   .then(() => {
     // console.log(`${req.body} Deleted!`)
-    res.send("Operation Complete")
+    res.json(JSON.stringify({message: "User deleted successfully"})).send()
   })
   .catch((error) => {
-    res.status(error?.status).send(error)
+    res.json(JSON.stringify({error: error, message: "Error deleting user profile"})).send()
   })
   }
   //delete auth account
@@ -384,10 +387,10 @@ fsApp.post('/deleteJob', cors({origin: url}), async (req,res) => {
   .delete()
   .then(() => {
     console.log(`${body.job} Deleted!`)
-    res.send("Job Delete Complete")
+    res.json(JSON.stringify({message: "Operation Complete"})).send()
   })
   .catch((error) => {
-    res.status(error?.status).send(error)
+    res.status(error?.status).json(JSON.stringify({message: "Error", error: error})).send()
   })
 })
 
@@ -399,11 +402,11 @@ fsApp.post('/mkDoc', cors({origin: url}), async (req,res) => {
   .doc(load.id)
   .set(load, {merge:true})
   .then(() => {
-    res.send(`Operation complete`)
+    res.json(JSON.stringify({message: "Operation Complete"})).send()
   })
   .catch((error) => {
     console.log(error.message)
-    res.send(error)
+    res.json(JSON.stringify({message: "Error", error: error})).send()
   })
 })
 
@@ -411,14 +414,28 @@ fsApp.post('/editRota', cors({origin: url}), async (req,res) => {
   let body = JSON.parse(req.body)
   admin.firestore()
   .collection(body.dept)
-  .doc(body.id)
-  .set(body, {merge:true})
-  .then(() => {
-    res.send(`Operation complete`)
+  .doc("rota")
+  .set(body.rota, {merge:true})
+  .then(async () => {
+    if (body.archive) {
+      let archive = await buildArchive(body.dept, body.archive)
+      await admin.firestore()
+      .collection(body.dept)
+      .doc("rota")
+      .collection("archive")
+      .doc(`${new Date(body.archive).toDateString()}`)
+      .set(archive)
+      .then(() => {
+        console.log(`Archive ${new Date(body.archive).toDateString()} created`)
+        res.json(JSON.stringify({message: "Operation complete, archive created"})).send()
+      })
+    } else {
+      res.json(JSON.stringify({message: "Operation complete, no archive created"})).send()
+    }
   })
   .catch((error) => {
     console.log(error.message)
-    res.send(error)
+    res.json(JSON.stringify({message: "Error updating rota", error: error})).send()
   })
 })
 
@@ -435,11 +452,10 @@ fsApp.post('/updateField', cors({origin: url}), async (req,res) => {
       .set({[body.field]: body.docs[i].quals},{merge:true})
       .catch((error) => {
         console.log(error)
-        res.send(error)
       })
     }
     return (
-      res.send(`Update to doc(s) complete`)
+      res.json(JSON.stringify({message: "Operation Complete"})).send()
     )
   }
   batchWrite()
@@ -459,7 +475,7 @@ fsApp.post('/updateDoc', cors({origin: url}), async (req,res) => {
     }
   }
   batchWrite()
-  res.send("update complete")
+  res.json(JSON.stringify({message: "Operation Complete"})).send()
 })
 
 fsApp.post('/updateBids', cors({origin: url}), async (req,res) => {
@@ -521,10 +537,10 @@ fsApp.post('/deleteDoc', cors({origin: url}), async (req, res) => {
   .doc(obj.doc).delete()
   .then(() => {
     console.log(`${obj.doc} Deleted!`)
-    res.send("Operation Complete")
+    res.json(JSON.stringify({message: `${obj.doc} Deleted!`})).send()
   })
   .catch((error) => {
-    res.status(error?.status).send(error)
+    res.status(error?.status).json(JSON.stringify({message: "Error deleting document", error: error})).send()
   })
 })
 
@@ -570,15 +586,15 @@ fsApp.post('/deleteDocField', cors({origin: url}), async (req, res) => {
       removeField(data[obj.nestedObj])
       updateNested()
       makeChange(docUpdate)
-      res.send(docUpdate)
+      res.json(JSON.stringify({message: `${obj.field} Deleted!`})).send()
     } else {
       removeField(data)
       makeChange(objUpdate)
-      res.send(objUpdate)
+      res.json(JSON.stringify({message: `${obj.field} Deleted!`})).send()
     }
   })
   .catch((error) => {
-    res.send(error)
+    res.sendStatus(error?.status).json(JSON.stringify({message: "Error deleting document", error: error})).send()
   })
 })
 
@@ -588,25 +604,14 @@ exports.fsApp = functions.https.onRequest(fsApp)
 
 //***************** Start Pub/Sub ************* */
 
-// exports.pubSub = functions.pubsub.topic("init").onPublish((context) => {
-//   console.log('pubSub Triggered');
-//   return true;
-// })
-exports.pubSub = functions.https.onRequest(async (req, res) => {
-  const {dept, start} = JSON.parse(req.body)
-
-  const obj = await buildArchive(dept, start)
-
-  await db.collection(dept).doc('rota').collection('archive').doc(`${new Date(start).toDateString()}`).set(obj)
-  .then(() => {
-    console.log(`Doc written to ${dept}/rota/archive/${new Date(start).toDateString()}`)
-  })
-  .catch((error) => {
-    console.error('Error writing document: ', error);
-    return res.json(JSON.stringify({message: `Error writing document: ${error}`})).send()
-  });
-
-  return res.json(JSON.stringify({message: `${new Date(start).toDateString()} successfully archived`})).send()
-})
+exports.scheduledFunction = functions.pubsub.schedule('every 5 minutes').onRun((context) => {
+  console.log('This will be run every 5 minutes!');
+  const date = new Date().toTimeString();
+  admin.firestore()
+  .collection("messages")
+  .doc("test")
+  .set({[date]: "test"},{merge:true})
+  return null;
+});
 
 //***************** End Pub/Sub ************* */

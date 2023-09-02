@@ -6,8 +6,8 @@ module.exports = async (req,res) => {
     const LIMIT = 200
     await db
     .collection(body.coll)
-    .where("date", ">=", body.start)
-    .where("date", "<=", body.end)
+    // .where("date", ">=", body.start)
+    // .where("date", "<=", body.end)
     .limit(LIMIT)
     .get()
     .then((docSnap) => {
@@ -20,7 +20,7 @@ module.exports = async (req,res) => {
       } else {
         docSnap.forEach((doc) => {
           let data = doc.data()
-          fs.writeFile(`C:\/Users\/georg\/Documents\/data\/${body.coll}/${doc.id}.json`, JSON.stringify(data), (err) => {
+          fs.writeFile(`C:\/overtime-management\/json-data\/${body.coll}/${doc.id}.json`, JSON.stringify(data), (err) => {
             if (err) {
               console.log(err)
             }

@@ -1,0 +1,4 @@
+{
+    "UID_NOT_FOUND": {"code": 1004, "message":"UID not found"},
+    "FIRESTORE_ERROR": {"code": 1004, "message":"UID not found"}
+}

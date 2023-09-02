@@ -1,5 +1,10 @@
 {
   "dependencies": {
     "dotenv": "^16.0.3"
+  },
+  "scripts": {
+    "start": "firebase emulators:start --import ./data/otm",
+    "export": "firebase emulators:export ./data/otm",
+    "emulators:stop": "npx kill-port 5001 9099 7000 4000"
   }
 }

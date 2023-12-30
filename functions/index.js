@@ -82,7 +82,11 @@ app.post("/newUser", (req, res) => {
                     .doc(userRecord.uid)
                     .set({ ...obj.profile, email: obj.auth.email })
                     .then(() => {
-                        successResponse(res, `Successfully created user ${obj.profile.dName}`, obj.profile);
+                        successResponse(
+                            res,
+                            `Successfully created user ${obj.profile.dName}`,
+                            obj.profile
+                        );
                     })
                     .catch((error) => {
                         console.error("Error writing user profile");
@@ -183,7 +187,9 @@ app.post("/resetPass", (req, res) => {
     getAuth()
         .generatePasswordResetLink(email)
         .then((link) => {
-            successResponse(res, "Password reset link sent to email", { link: link });
+            successResponse(res, "Password reset link sent to email", {
+                link: link,
+            });
         })
         .catch((error) => {
             errorResponse(res, error);
@@ -295,9 +301,10 @@ fsApp.post("/getJobs", async (req, res) => {
         for (i in depts) {
             await db
                 .collection(depts[i])
+                .orderBy("order", "asc")
                 .get()
                 .then((querySnapshot) => {
-                    console.log(depts[i])
+                    console.log(depts[i]);
                     querySnapshot.forEach((doc) => {
                         jobs.push(doc.data());
                     });
@@ -320,7 +327,9 @@ fsApp.post("/addJob", async (req, res) => {
     // console.log(body)
     let name = body.label.toLowerCase().replace(/\s/g, "-");
     // Generate unique ID
-    let id = `${body.group}-${name}-${Math.random().toString(36).substring(2, 9)}`;
+    let id = `${body.group}-${name}-${Math.random()
+        .toString(36)
+        .substring(2, 9)}`;
     let ids = [];
     await db
         .collection(body.dept)
@@ -338,7 +347,9 @@ fsApp.post("/addJob", async (req, res) => {
         let i = 0;
         do {
             console.warn("Generating new ID attempt: " + i);
-            id = `${body.group}-${name}-${Math.random().toString(36).substring(2, 9)}`;
+            id = `${body.group}-${name}-${Math.random()
+                .toString(36)
+                .substring(2, 9)}`;
             i++;
         } while (ids.includes(id));
         console.log("New ID generated: " + id);
@@ -379,13 +390,13 @@ fsApp.post("/addJob", async (req, res) => {
         });
 
     // create job doc
-    let doc = {}
+    let doc = {};
     for (const key in body) {
         if (key !== "users") {
-            doc[key] = body[key]
+            doc[key] = body[key];
         }
     }
-    doc['id'] = id
+    doc["id"] = id;
 
     await db
         .collection(doc.dept)
@@ -427,16 +438,22 @@ fsApp.post("/editJob", async (req, res) => {
         .get()
         .then((querySnapshot) => {
             querySnapshot.forEach(async (doc) => {
-                let user = doc.data()
-                let action = ""
+                let user = doc.data();
+                let action = "";
                 if (user.dept[0] === job.dept) {
                     let update = user.quals;
                     // console.log(user.quals)
-                    if (user.quals.includes(job.id) && !users.includes(user.id)) {
-                        action = "Removed"
+                    if (
+                        user.quals.includes(job.id) &&
+                        !users.includes(user.id)
+                    ) {
+                        action = "Removed";
                         update = user.quals.filter((id) => id !== job.id);
-                    } else if (!user.quals.includes(job.id) && users.includes(user.id)) {
-                        action = "Added"
+                    } else if (
+                        !user.quals.includes(job.id) &&
+                        users.includes(user.id)
+                    ) {
+                        action = "Added";
                         update.push(job.id);
                     }
                     await db

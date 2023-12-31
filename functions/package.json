@@ -40,7 +40,7 @@
     "dotenv": "^16.0.3",
     "express": "^4.17.3",
     "firebase-admin": "^10.0.2",
-    "firebase-functions": "^4.4.1"
+    "firebase-functions": "^4.5.0"
   },
   "devDependencies": {
     "firebase-functions-test": "^0.2.0"

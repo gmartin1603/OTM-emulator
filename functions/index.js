@@ -706,20 +706,18 @@ fsApp.post("/mkDoc", async (req, res) => {
 });
 
 fsApp.post("/editRota", async (req, res) => {
-    let body = JSON.parse(req.body);
-    // let body = req.body
-    console.log(body);
-    admin
-        .firestore()
-        .collection(body.dept)
-        .doc(body.id)
-        .set(body, { merge: true })
-        .then(() => {
-            successResponse(res, "Rota update complete");
-        })
-        .catch((error) => {
-            errorResponse(res, error);
-        });
+  let body = JSON.parse(req.body);
+  // console.log(body);
+  admin.firestore()
+    .collection(body.dept)
+    .doc(body.id)
+    .set(body, { merge: true })
+    .then(() => {
+        successResponse(res, "Rota update complete");
+    })
+    .catch((error) => {
+        errorResponse(res, error);
+    });
 });
 
 fsApp.post("/updateField", async (req, res) => {
@@ -920,20 +918,21 @@ exports.fsApp = functions.https.onRequest(applyCORS(fsApp));
 //   console.log('pubSub Triggered');
 //   return true;
 // })
-exports.scheduledFunction = functions.pubsub
-    .schedule("every 5 minutes")
-    .onRun((context) => {
-        console.log("This will be run every 5 minutes!");
-        db.collection("logs")
-            .doc("pubSub")
-            .set(
-                {
-                    [new Date.toDateString()]: "PubSub Triggered",
-                },
-                { merge: true }
-            );
-        return null;
-    });
+
+// exports.scheduledFunction = functions.pubsub
+//     .schedule("every 5 minutes")
+//     .onRun((context) => {
+//         console.log("This will be run every 5 minutes!");
+//         db.collection("logs")
+//             .doc("pubSub")
+//             .set(
+//                 {
+//                     [new Date.toDateString()]: "PubSub Triggered",
+//                 },
+//                 { merge: true }
+//             );
+//         return null;
+//     });
 
 // exports.pubSub = functions.https.onRequest(async (req, res) => {
 //     const { dept, start } = JSON.parse(req.body);

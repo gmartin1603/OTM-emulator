@@ -7,14 +7,16 @@ const buildArchive = require("./helpers/buildArchive");
 const copyToLocal = require("./dev_routes/copyToLocal");
 const writeToFirestore = require("./dev_routes/writeToFirestore");
 const deleteOldPosts = require("./dev_routes/deleteOldPosts");
-const { error } = require("firebase-functions/logger");
 require("dotenv").config();
 
 let env = "";
+let corsOrigin = "";
 if (process.env.NODE_ENV == "dev") {
     env = "dev";
+    corsOrigin = "http://localhost:3000";
 } else {
     env = "prod";
+    corsOrigin = process.env.NODE_ENV_CORS_URL;
 }
 // console.log("env: ", env)
 console.log("env: ", env);
@@ -201,30 +203,34 @@ exports.app = functions.https.onRequest(applyCORS(app));
 
 // -------------------------------------------------- //
 
-// ------------------- fsApp start -------------------//
-
-//Express init
-const fsApp = express();
-// use cors({origin: url}) in all routes
 
 // ------------------- Dev Tools ---------------- //
+// const devApp = express();
 
-fsApp.post(
-    "/copyToLocal",
-    cors({ origin: "http://localhost:3000" }),
-    async (req, res) => copyToLocal(req, res)
-);
-
-fsApp.post(
-    "/writeToFirestore",
-    cors({ origin: "http://localhost:3000" }),
-    async (req, res) => writeToFirestore(req, res)
-);
-
+// devApp.post(
+//   "/copyToLocal",
+//   async (req, res) => copyToLocal(req, res)
+//   );
+  
+// devApp.post(
+//   "/writeToFirestore",
+//   async (req, res) => writeToFirestore(req, res)
+// );
+  
 // fsApp.post('/updatePosts', cors({origin: "http://localhost:3000"}), async (req,res) => (updatePosts(req,res)))
 
 // fsApp.post('/deleteOldPosts', cors({origin: "http://localhost:3000"}), async (req,res) => (deleteOldPosts(req,res)))
+
+// exports.devApp = functions.https.onRequest(applyCORS(devApp));
 // --------------------------------------------------------- //
+
+// ------------------- fsApp start -------------------//
+//Express init
+const fsApp = express();
+
+fsApp.post("/getVersion", (req, res) => {
+  successResponse(res, "v4.4.0");
+});
 
 fsApp.post("/buildArchive", async (req, res) => {
     const { dept, start } = JSON.parse(req.body);

@@ -4,7 +4,7 @@
       "port": 9099
     },
     "firestore": {
-      "port": 7000
+      "port": 7001
     },
     "ui": {
       "enabled": true
@@ -12,7 +12,7 @@
     "functions": {
       "port": 5001
     },
-    "singleProjectMode": true
+    "singleProjectMode": false
   },
   "firestore": {
     "rules": "firestore.rules",

@@ -1,3 +1,9 @@
+/**
+ * @file index.js is the root file for this project.
+ * It is the first file that runs when you start your server.
+ * Leave comments that start with "**SCRIPT**" in place so that the project scripts can inject code in the correct places.
+ *
+ */
 const functions = require("firebase-functions");
 const { getAuth } = require("firebase-admin/auth");
 const { db, admin } = require("./helpers/firebase");
@@ -6,12 +12,16 @@ const cors = require("cors");
 const bodyParser = require("body-parser");
 const API_VERSION = require("./package.json").version;
 const buildArchive = require("./helpers/buildArchive");
-const appController = require("./web_api/controllers/app-controller");
-const devAppController = require("./web_api/controllers/devApp-controller");
 const copyToLocal = require("./dev_routes/copyToLocal");
 const writeToFirestore = require("./dev_routes/writeToFirestore");
 const deleteOldPosts = require("./dev_routes/deleteOldPosts");
 const { writeLog } = require("./web_api/services/common-service");
+
+// **SCRIPT** CONTROLLER IMPORT START
+const appController = require("./web_api/controllers/app-controller");
+const devAppController = require("./web_api/controllers/devApp-controller");
+// **SCRIPT** CONTROLLER IMPORT END
+
 require("dotenv").config();
 
 let env = "";
@@ -61,6 +71,10 @@ const errorResponse = (res, error, code = 500) => {
 const successResponse = (res, message, data) => {
     return res.json({ status: true, message: message, data: data }).send();
 };
+
+// **SCRIPT** CONTROLLER ROUTING START
+
+// **SCRIPT** CONTROLLER ROUTING END
 
 
 //******* userApp start ************** */

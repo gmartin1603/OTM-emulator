@@ -18,6 +18,7 @@ const deleteOldPosts = require("./dev_routes/deleteOldPosts");
 const { writeLog } = require("./web_api/services/common-service");
 
 // **SCRIPT** CONTROLLER IMPORT START
+const userController = require("./web_api/controllers/user-controller");
 const appController = require("./web_api/controllers/app-controller");
 const devAppController = require("./web_api/controllers/devApp-controller");
 // **SCRIPT** CONTROLLER IMPORT END
@@ -73,6 +74,12 @@ const successResponse = (res, message, data) => {
 };
 
 // **SCRIPT** CONTROLLER ROUTING START
+
+  const user = express();
+  user.post("*", (req, res) => userController(req, res));
+
+  exports.user = functions.https.onRequest(applyMiddleware(user));
+  
 
 // **SCRIPT** CONTROLLER ROUTING END
 

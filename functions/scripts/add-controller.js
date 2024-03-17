@@ -98,6 +98,13 @@ const ${name}Service = {
 module.exports = ${name}Service;
 `;
 
+// const indexImport = `const ${name}Controller = require("./${name}-controller");`;
+// const indexRoute = `
+// const ${name} = express();
+// ${name}.post("*", (req, res) => ${name}Controller(req, res));
+// exports.${name} = functions.https.onRequest(applyMiddleware(${name});
+// `;
+
 const buildController = (name) => {
   // Check if the name argument was provided
   if (!name) {
@@ -119,12 +126,53 @@ const buildController = (name) => {
     throw new Error("Service file already exists");
   }
 
-  // Assuming controllerTemplate and serviceTemplate are defined somewhere in your script
-  fs.writeFileSync(controllerPath, controllerTemplate);
-  fs.writeFileSync(servicePath, serviceTemplate);
+  try {
+    // Assuming controllerTemplate and serviceTemplate are defined somewhere in your script
+    fs.writeFileSync(controllerPath, controllerTemplate);
+    fs.writeFileSync(servicePath, serviceTemplate);
+  } catch (error) {
+    throw new Error(`Error writing to file: ${error.message}`);
+  }
+
+  const indexImport = `const ${name}Controller = require("./web_api/controllers/${name}-controller");`;
+  const indexRoute = `
+  const ${name} = express();
+  ${name}.post("*", (req, res) => ${name}Controller(req, res));
+
+  exports.${name} = functions.https.onRequest(applyMiddleware(${name}));
+  `;
+
+  // Add new controller route to ../index.js
+  const indexFile = path.join(__dirname, "../index.js");
+  const indexData = fs.readFileSync(indexFile, "utf8");
+  let indexLines = indexData.split("\n");
+  
+  const importStart = indexLines.findIndex((line) => line.includes("**SCRIPT** CONTROLLER IMPORT START"));
+  let import_head = indexLines.slice(0, importStart + 1);
+  import_head.push(indexImport);
+  let import_tail = indexLines.slice(importStart + 1);
+  console.log(import_head)
+  indexLines = import_head.concat(import_tail);
+
+  const routeStart = indexLines.findIndex((line) => line.includes("**SCRIPT** CONTROLLER ROUTING START"));
+  let route_head = indexLines.slice(0, routeStart + 1)
+  route_head.push(indexRoute);
+  let route_tail = indexLines.slice(routeStart + 1);
+  indexLines = route_head.concat(route_tail);
+
+  if (routeStart === -1 || importStart === -1) {
+    throw new Error("Error adding new route to index.js");
+  } else {
+    try {
+      // console.log(indexLines)
+      fs.writeFileSync(indexFile, indexLines.join("\n"));
+    } catch (error) {
+      throw new Error(`Error writing to file: ${error.message}`);
+    }
+  }
 
   console.log(`Controller and service files created: \n Controller File: ${path.relative(__dirname, controllerPath)}, \n Service File: ${path.relative(__dirname, servicePath)}`);
-  console.log("Don't forget to add the new controller to the router in /functions/index.js");
+
 
   process.exit(0);
 };

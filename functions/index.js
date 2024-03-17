@@ -3,7 +3,10 @@ const { getAuth } = require("firebase-admin/auth");
 const { db, admin } = require("./helpers/firebase");
 const express = require("express");
 const cors = require("cors");
+const bodyParser = require("body-parser");
+const API_VERSION = require("./package.json").version;
 const buildArchive = require("./helpers/buildArchive");
+const appController = require("./web_api/controllers/app-controller");
 const copyToLocal = require("./dev_routes/copyToLocal");
 const writeToFirestore = require("./dev_routes/writeToFirestore");
 const deleteOldPosts = require("./dev_routes/deleteOldPosts");
@@ -23,13 +26,22 @@ console.log("env: ", env);
 
 //******* userApp start ************** */
 //Express init
-const app = express();
+// const app = express();
 
 const corsHandler = cors({ origin: true });
 
-const applyCORS = (handler) => (req, res) => {
+// refactor applyMiddleware to use corsHandler and bodyParser
+// const applyMiddleware = (handler) => (req, res) => {
+//     return corsHandler(req, res, (_) => {
+//         return handler(req, res);
+//     });
+// };
+
+const applyMiddleware = (handler) => (req, res) => {
     return corsHandler(req, res, (_) => {
-        return handler(req, res);
+        return bodyParser.json()(req, res, () => {
+            return handler(req, res);
+        });
     });
 };
 
@@ -46,64 +58,50 @@ const successResponse = (res, message, data) => {
     return res.json({ status: true, message: message, data: data }).send();
 };
 
-//get user profile by firebase uid
-app.post("/getUser", async (req, res) => {
-    let uid = req.body.uid;
-    let resObj = {};
-    // console.log(uid)
+//Express init
+const app = express();
 
-    await admin
-        .firestore()
-        .collection("users")
-        .doc(uid)
-        .get()
-        .then((doc) => {
-            if (!doc.exists) {
-                errorResponse(res, "No profile doc found", 1004);
-            }
-            successResponse(res, "Success", doc.data());
-        })
-        .catch((error) => {
-            errorResponse(res, error);
-        });
-});
+// Send request to app to appController
+// app.post("*", appController(req, res));
 
-app.post("/newUser", (req, res) => {
-    try {
-        let obj = JSON.parse(req.body);
-        // console.log(obj);
-        getAuth()
-            .createUser(obj.auth)
-            .then((userRecord) => {
-                // See the UserRecord reference doc for the contents of userRecord.
-                console.log("Successfully created new user:", userRecord.uid);
-                obj.profile.id = userRecord.uid;
-                admin
-                    .firestore()
-                    .collection("users")
-                    .doc(userRecord.uid)
-                    .set({ ...obj.profile, email: obj.auth.email })
-                    .then(() => {
-                        successResponse(
-                            res,
-                            `Successfully created user ${obj.profile.dName}`,
-                            obj.profile
-                        );
-                    })
-                    .catch((error) => {
-                        console.error("Error writing user profile");
-                        errorResponse(res, error);
-                    });
-            })
-            .catch((error) => {
-                console.error("Error creating new user");
-                errorResponse(res, error);
-            });
-    } catch (error) {
-        console.error("Error from catch block");
-        errorResponse(res, error);
-    }
-});
+
+
+// app.post("/newUser", (req, res) => {
+//     try {
+//         let obj = JSON.parse(req.body);
+//         // console.log(obj);
+//         getAuth()
+//             .createUser(obj.auth)
+//             .then((userRecord) => {
+//                 // See the UserRecord reference doc for the contents of userRecord.
+//                 console.log("Successfully created new user:", userRecord.uid);
+//                 obj.profile.id = userRecord.uid;
+//                 admin
+//                     .firestore()
+//                     .collection("users")
+//                     .doc(userRecord.uid)
+//                     .set({ ...obj.profile, email: obj.auth.email })
+//                     .then(() => {
+//                         successResponse(
+//                             res,
+//                             `Successfully created user ${obj.profile.dName}`,
+//                             obj.profile
+//                         );
+//                     })
+//                     .catch((error) => {
+//                         console.error("Error writing user profile");
+//                         errorResponse(res, error);
+//                     });
+//             })
+//             .catch((error) => {
+//                 console.error("Error creating new user");
+//                 errorResponse(res, error);
+//             });
+//     } catch (error) {
+//         console.error("Error from catch block");
+//         errorResponse(res, error);
+//     }
+// });
 
 app.post("/updateUser", async (req, res) => {
     let obj = JSON.parse(req.body);
@@ -198,31 +196,17 @@ app.post("/resetPass", (req, res) => {
         });
 });
 
-// Set Express app to deploy in Firebse Function "app"
-exports.app = functions.https.onRequest(applyCORS(app));
+// Returns API version from package.json
+app.get("/getVersion", (req, res) => {
+  successResponse(res, API_VERSION);
+});
+
+app.post("*", (req, res) => appController(req, res));
+
+// Set Express app to deploy in Firebase Function "app"
+exports.app = functions.https.onRequest(applyMiddleware(app));
 
 // -------------------------------------------------- //
-
-
-// ------------------- Dev Tools ---------------- //
-// const devApp = express();
-
-// devApp.post(
-//   "/copyToLocal",
-//   async (req, res) => copyToLocal(req, res)
-//   );
-  
-// devApp.post(
-//   "/writeToFirestore",
-//   async (req, res) => writeToFirestore(req, res)
-// );
-  
-// fsApp.post('/updatePosts', cors({origin: "http://localhost:3000"}), async (req,res) => (updatePosts(req,res)))
-
-// fsApp.post('/deleteOldPosts', cors({origin: "http://localhost:3000"}), async (req,res) => (deleteOldPosts(req,res)))
-
-// exports.devApp = functions.https.onRequest(applyCORS(devApp));
-// --------------------------------------------------------- //
 
 // ------------------- fsApp start -------------------//
 //Express init
@@ -914,9 +898,29 @@ fsApp.post("/deleteDocField", async (req, res) => {
         });
 });
 
-exports.fsApp = functions.https.onRequest(applyCORS(fsApp));
+exports.fsApp = functions.https.onRequest(applyMiddleware(fsApp));
 
 //***************** End FsApp ************* */
+
+// ------------------- Dev Tools ---------------- //
+// const devApp = express();
+
+// devApp.post(
+//   "/copyToLocal",
+//   async (req, res) => copyToLocal(req, res)
+//   );
+  
+// devApp.post(
+//   "/writeToFirestore",
+//   async (req, res) => writeToFirestore(req, res)
+// );
+  
+// devApp.post('/updatePosts', cors({origin: "http://localhost:3000"}), async (req,res) => (updatePosts(req,res)))
+
+// devApp.post('/deleteOldPosts', cors({origin: "http://localhost:3000"}), async (req,res) => (deleteOldPosts(req,res)))
+
+// exports.devApp = functions.https.onRequest(applyMiddleware(devApp));
+// --------------------------------------------------------- //
 
 //***************** Start Pub/Sub ************* */
 

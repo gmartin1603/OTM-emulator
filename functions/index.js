@@ -7,14 +7,16 @@ const buildArchive = require("./helpers/buildArchive");
 const copyToLocal = require("./dev_routes/copyToLocal");
 const writeToFirestore = require("./dev_routes/writeToFirestore");
 const deleteOldPosts = require("./dev_routes/deleteOldPosts");
-const { error } = require("firebase-functions/logger");
 require("dotenv").config();
 
 let env = "";
+let corsOrigin = "";
 if (process.env.NODE_ENV == "dev") {
     env = "dev";
+    corsOrigin = "http://localhost:3000";
 } else {
     env = "prod";
+    corsOrigin = process.env.NODE_ENV_CORS_URL;
 }
 // console.log("env: ", env)
 console.log("env: ", env);
@@ -67,9 +69,9 @@ app.post("/getUser", async (req, res) => {
 });
 
 app.post("/newUser", (req, res) => {
-    let obj = JSON.parse(req.body);
-    // console.log(obj);
     try {
+        let obj = JSON.parse(req.body);
+        // console.log(obj);
         getAuth()
             .createUser(obj.auth)
             .then((userRecord) => {
@@ -80,21 +82,25 @@ app.post("/newUser", (req, res) => {
                     .firestore()
                     .collection("users")
                     .doc(userRecord.uid)
-                    .set(obj.profile)
+                    .set({ ...obj.profile, email: obj.auth.email })
                     .then(() => {
-                        successResponse(res, `Successfully created user ${obj.profile.dName}`, obj.profile);
+                        successResponse(
+                            res,
+                            `Successfully created user ${obj.profile.dName}`,
+                            obj.profile
+                        );
                     })
                     .catch((error) => {
-                        console.log("Error writing user profile");
+                        console.error("Error writing user profile");
                         errorResponse(res, error);
                     });
             })
             .catch((error) => {
-                console.log("Error creating new user");
+                console.error("Error creating new user");
                 errorResponse(res, error);
             });
     } catch (error) {
-        console.log("Error from catch block");
+        console.error("Error from catch block");
         errorResponse(res, error);
     }
 });
@@ -183,7 +189,9 @@ app.post("/resetPass", (req, res) => {
     getAuth()
         .generatePasswordResetLink(email)
         .then((link) => {
-            successResponse(res, "Password reset link sent to email", {link: link});
+            successResponse(res, "Password reset link sent to email", {
+                link: link,
+            });
         })
         .catch((error) => {
             errorResponse(res, error);
@@ -195,30 +203,34 @@ exports.app = functions.https.onRequest(applyCORS(app));
 
 // -------------------------------------------------- //
 
-// ------------------- fsApp start -------------------//
-
-//Express init
-const fsApp = express();
-// use cors({origin: url}) in all routes
 
 // ------------------- Dev Tools ---------------- //
+// const devApp = express();
 
-fsApp.post(
-    "/copyToLocal",
-    cors({ origin: "http://localhost:3000" }),
-    async (req, res) => copyToLocal(req, res)
-);
-
-fsApp.post(
-    "/writeToFirestore",
-    cors({ origin: "http://localhost:3000" }),
-    async (req, res) => writeToFirestore(req, res)
-);
-
+// devApp.post(
+//   "/copyToLocal",
+//   async (req, res) => copyToLocal(req, res)
+//   );
+  
+// devApp.post(
+//   "/writeToFirestore",
+//   async (req, res) => writeToFirestore(req, res)
+// );
+  
 // fsApp.post('/updatePosts', cors({origin: "http://localhost:3000"}), async (req,res) => (updatePosts(req,res)))
 
 // fsApp.post('/deleteOldPosts', cors({origin: "http://localhost:3000"}), async (req,res) => (deleteOldPosts(req,res)))
+
+// exports.devApp = functions.https.onRequest(applyCORS(devApp));
 // --------------------------------------------------------- //
+
+// ------------------- fsApp start -------------------//
+//Express init
+const fsApp = express();
+
+fsApp.post("/getVersion", (req, res) => {
+  successResponse(res, "v4.4.0");
+});
 
 fsApp.post("/buildArchive", async (req, res) => {
     const { dept, start } = JSON.parse(req.body);
@@ -284,6 +296,192 @@ fsApp.post("/updateArchive", async (req, res) => {
         .catch((error) => {
             errorResponse(res, error);
         });
+});
+
+fsApp.post("/getJobs", async (req, res) => {
+    try {
+        let errorStatus = false;
+        let depts = JSON.parse(req.body);
+        // console.log(depts);
+        let jobs = [];
+        for (i in depts) {
+            await db
+                .collection(depts[i])
+                .orderBy("order", "asc")
+                .get()
+                .then((querySnapshot) => {
+                    console.log(depts[i]);
+                    querySnapshot.forEach((doc) => {
+                        jobs.push(doc.data());
+                    });
+                })
+                .catch((error) => {
+                    console.error(error);
+                    errorStatus = true;
+                    throw error;
+                });
+        }
+        // console.log(jobs);
+        successResponse(res, "Operation complete", jobs);
+    } catch (error) {
+        errorResponse(res, error);
+    }
+});
+
+fsApp.post("/addJob", async (req, res) => {
+    let body = JSON.parse(req.body);
+    // console.log(body)
+    let name = body.label.toLowerCase().replace(/\s/g, "-");
+    // Generate unique ID
+    let id = `${body.group}-${name}-${Math.random()
+        .toString(36)
+        .substring(2, 9)}`;
+    let ids = [];
+    await db
+        .collection(body.dept)
+        .where("group", "==", body.group)
+        .get()
+        .then((querySnapshot) => {
+            querySnapshot.forEach((doc) => {
+                ids.push(doc.id);
+            });
+        })
+        .catch((error) => {
+            console.error(error);
+        });
+    if (ids.includes(id)) {
+        let i = 0;
+        do {
+            console.warn("Generating new ID attempt: " + i);
+            id = `${body.group}-${name}-${Math.random()
+                .toString(36)
+                .substring(2, 9)}`;
+            i++;
+        } while (ids.includes(id));
+        console.log("New ID generated: " + id);
+    } else {
+        console.log("ID is unique");
+    }
+
+    // Add job to users
+    let users = body.users;
+    let updatedUsers = 0;
+    await db
+        .collection("users")
+        .where("role", "==", "ee")
+        .get()
+        .then((querySnapshot) => {
+            querySnapshot.forEach(async (doc) => {
+                if (doc.data().dept[0] === body.dept) {
+                    if (users.includes(doc.data().id)) {
+                        let update = doc.data().quals;
+                        update.push(id);
+                        await db
+                            .collection("users")
+                            .doc(doc.data().id)
+                            .set({ quals: update }, { merge: true })
+                            .then(() => {
+                                console.log(`${doc.data().id} updated`);
+                                updatedUsers++;
+                            })
+                            .catch((error) => {
+                                console.log(error);
+                            });
+                    }
+                }
+            });
+        })
+        .catch((error) => {
+            console.log(error);
+        });
+
+    // create job doc
+    let doc = {};
+    for (const key in body) {
+        if (key !== "users") {
+            doc[key] = body[key];
+        }
+    }
+    doc["id"] = id;
+
+    await db
+        .collection(doc.dept)
+        .doc(id)
+        .set(doc, { merge: true })
+        .then(() => {
+            successResponse(res, `Operation complete ${body.label} added`);
+        })
+        .catch((error) => {
+            errorResponse(res, error);
+        });
+});
+
+fsApp.post("/editJob", async (req, res) => {
+    let { job, users } = JSON.parse(req.body);
+    let errorStatus = false;
+    let message = [];
+    // console.log(job)
+    // Update job doc
+    await db
+        .collection(job.dept)
+        .doc(job.id)
+        .set(job, { merge: true })
+        .then(() => {
+            // console.log(`${job.id} updated`);
+            message.push(`${job.label} updated`);
+        })
+        .catch((error) => {
+            console.log(error);
+            errorStatus = true;
+            throw error;
+        });
+
+    // Update users
+    let updatedUsers = 0;
+    await db
+        .collection("users")
+        .where("role", "==", "ee")
+        .get()
+        .then((querySnapshot) => {
+            querySnapshot.forEach(async (doc) => {
+                let user = doc.data();
+                let action = "";
+                if (user.dept[0] === job.dept) {
+                    let update = user.quals;
+                    // console.log(user.quals)
+                    if (
+                        user.quals.includes(job.id) &&
+                        !users.includes(user.id)
+                    ) {
+                        action = "Removed";
+                        update = user.quals.filter((id) => id !== job.id);
+                    } else if (
+                        !user.quals.includes(job.id) &&
+                        users.includes(user.id)
+                    ) {
+                        action = "Added";
+                        update.push(job.id);
+                    }
+                    await db
+                        .collection("users")
+                        .doc(user.id)
+                        .set({ quals: update }, { merge: true })
+                        .then(() => {
+                            console.log(`${user.id} ${action}`);
+                            message.push(`${user.dName} ${action}`);
+                            updatedUsers++;
+                        })
+                        .catch((error) => {
+                            console.log(error);
+                        });
+                }
+            });
+        })
+        .catch((error) => {
+            console.log(error);
+        });
+
+    successResponse(res, `Operation complete ${message.join(", ")}`);
 });
 
 fsApp.post("/setPost", (req, res) => {
@@ -514,20 +712,18 @@ fsApp.post("/mkDoc", async (req, res) => {
 });
 
 fsApp.post("/editRota", async (req, res) => {
-    let body = JSON.parse(req.body);
-    // let body = req.body
-    console.log(body);
-    admin
-        .firestore()
-        .collection(body.dept)
-        .doc(body.id)
-        .set(body, { merge: true })
-        .then(() => {
-            successResponse(res, "Rota update complete");
-        })
-        .catch((error) => {
-            errorResponse(res, error);
-        });
+  let body = JSON.parse(req.body);
+  // console.log(body);
+  admin.firestore()
+    .collection(body.dept)
+    .doc(body.id)
+    .set(body, { merge: true })
+    .then(() => {
+        successResponse(res, "Rota update complete");
+    })
+    .catch((error) => {
+        errorResponse(res, error);
+    });
 });
 
 fsApp.post("/updateField", async (req, res) => {
@@ -728,20 +924,21 @@ exports.fsApp = functions.https.onRequest(applyCORS(fsApp));
 //   console.log('pubSub Triggered');
 //   return true;
 // })
-exports.scheduledFunction = functions.pubsub
-    .schedule("every 5 minutes")
-    .onRun((context) => {
-        console.log("This will be run every 5 minutes!");
-        db.collection("logs")
-            .doc("pubSub")
-            .set(
-                {
-                    [new Date.toDateString()]: "PubSub Triggered",
-                },
-                { merge: true }
-            );
-        return null;
-    });
+
+// exports.scheduledFunction = functions.pubsub
+//     .schedule("every 5 minutes")
+//     .onRun((context) => {
+//         console.log("This will be run every 5 minutes!");
+//         db.collection("logs")
+//             .doc("pubSub")
+//             .set(
+//                 {
+//                     [new Date.toDateString()]: "PubSub Triggered",
+//                 },
+//                 { merge: true }
+//             );
+//         return null;
+//     });
 
 // exports.pubSub = functions.https.onRequest(async (req, res) => {
 //     const { dept, start } = JSON.parse(req.body);

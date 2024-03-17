@@ -6,63 +6,53 @@
  * @description app-service is called by and returns to app-controller
  * @exports appService
  */
-const { handlePromise, handleResponse } = require("./common-service");
+const { handlePromise, handleResponse, writeLog } = require("./common-service");
 const { getAuth } = require("firebase-admin/auth");
 const { db, admin } = require("../../helpers/firebase");
 
 const appService = {
+
   getUser: async (req, res) => {
     const body = req.body;
     console.log("Req body: ", body);
     const uid = body.uid;
     console.log("Fetching user data for uid:", uid);
     if (!uid) {
-      // handleResponse(res, "error", {
-      //   error: { message: "uid is required" },
-      //   method: "getUser",
-      // });
-      throw new Error("uid is required");
+      throw new Error("No user ID provided");
+      // throw { message: "No user ID provided", method: "getUser" };
     }
 
     const get_user_api = () => getAuth().getUser(uid);
-
     const [user, error] = await handlePromise(get_user_api);
 
     if (error) {
-      // console.error("Error fetching user data:", error);
-      // handleResponse(res, "error", { error: error, method: "getUser" });
       throw new Error(error);
     } else {
-      // console.log("Successfully fetched user data:", user);
-      // let resObj = {
-      //   status: "success",
-      //   message: "Successfully fetched user data",
-      //   data: user,
-      //   method: "getUser",
-      // };
-      // handleResponse(res, "success", resObj);
       return user;
     }
   },
 
   createUser: async (req, res) => {
-    // let obj = JSON.parse(req.body);
-    let obj = req.body;
-    console.log(obj);
+    const obj = req.body;
+    // console.log(obj);
     if (!obj.auth || !obj.profile) {
-      return handleResponse(res, "error", {
-        error: { message: "No user data provided" },
-        method: "createUser",
-      });
+      let msg = "";
+      if (!obj.auth) {
+        msg += "No auth object provided. ";
+      }
+      if (!obj.profile) {
+        msg += "No profile object provided.";
+      }
+      throw new Error(msg);
     }
     const create_user_auth = () => getAuth().createUser(obj.auth);
 
     const [userRecord, error] = await handlePromise(create_user_auth);
 
     if (error) {
-      handleResponse(res, "error", { error: error, method: "createUser auth" });
+      throw error;
     } else {
-      console.log("Successfully created new user: ", userRecord.uid);
+      // console.log("Successfully created new user: ", userRecord.uid);
       obj.profile.id = userRecord.uid;
       const create_user_profile = () =>
         admin
@@ -71,22 +61,102 @@ const appService = {
           .doc(userRecord.uid)
           .set({ ...obj.profile, email: obj.auth.email }, { merge: true });
 
-      const [_, profileError] = await handlePromise(create_user_profile);
+      const [userProfile, profileError] = await handlePromise(create_user_profile);
 
       if (profileError) {
-        console.error("Error writing user profile:", profileError);
-        handleResponse(res, "error", { error: profileError, method: "createUser profile" });
+        // console.error("Error writing user profile:", profileError);
+        
+        //TODO: Remove the previously created user on error
+        // const delete_user_api = () => getAuth().deleteUser(userRecord.uid);
+        // const [_, deleteError] = await handlePromise(delete_user_api);
+        // if (deleteError) {
+        //   // console.error("Error deleting user:", deleteError);
+        //   writeLog("error", {
+        //     message: "Error creating profile and deleting user",
+        //     user: userRecord.uid,
+        //     error: deleteError,
+        //   });
+        // }
+        throw profileError;
       } else {
-        console.log("Successfully created user profile");
-        handleResponse(res, "success", {
-          status: "success",
+        let response = {
           message: "Successfully created new user",
-          data: userRecord,
-          method: "createUser",
-        });
+          auth: userRecord,
+          profile: userProfile,
+        }
+        return response;
       }
     }
   },
+
+  updateUser: async (req, res) => {
+    const obj = req.body;
+    const uid = obj.uid;
+    if (!uid) {
+      throw new Error("No user ID provided");
+    }
+
+    const update_profile_api = () => 
+      admin
+        .firestore()
+        .collection("users")
+        .doc(uid)
+        .set(obj.profile, { merge: true });
+    const [user, error] = await handlePromise(update_profile_api);
+
+    if (error) {
+      throw new Error(error);
+    } else {
+      if (obj.auth) {
+        const update_auth_api = () => getAuth().updateUser(uid, obj.auth);
+        const [auth, authError] = await handlePromise(update_auth_api);
+        if (authError) {
+          throw new Error(authError);
+        } else {
+          let response = {
+            message: "Successfully updated user",
+            auth: auth,
+            profile: user,
+          }
+          return response;
+        }
+      } else {
+        let response = {
+          message: "Successfully updated user",
+          profile: user,
+        }
+        return response;
+      }
+    }
+  },
+  
+  deleteUser: async (req, res) => {
+    const uid = req.body.uid;
+    if (!uid) {
+      throw new Error("No user ID provided");
+    }
+
+    const delete_auth_api = () => getAuth().deleteUser(uid);
+    const [auth, error] = await handlePromise(delete_auth_api);
+
+    if (error) {
+      throw new Error(error);
+    } else {
+      const delete_profile_api = () => admin.firestore().collection("users").doc(uid).delete();
+      const [profile, profileError] = await handlePromise(delete_profile_api);
+
+      if (profileError) {
+        throw new Error(profileError);
+      } else {
+        let response = {
+          message: "Successfully deleted user",
+          auth: auth,
+          profile: profile,
+        }
+        return response;
+      }
+    }
+  }
 };
 
 module.exports = appService;

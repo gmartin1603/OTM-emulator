@@ -7,9 +7,11 @@ const bodyParser = require("body-parser");
 const API_VERSION = require("./package.json").version;
 const buildArchive = require("./helpers/buildArchive");
 const appController = require("./web_api/controllers/app-controller");
+const devAppController = require("./web_api/controllers/devApp-controller");
 const copyToLocal = require("./dev_routes/copyToLocal");
 const writeToFirestore = require("./dev_routes/writeToFirestore");
 const deleteOldPosts = require("./dev_routes/deleteOldPosts");
+const { writeLog } = require("./web_api/services/common-service");
 require("dotenv").config();
 
 let env = "";
@@ -24,10 +26,6 @@ if (process.env.NODE_ENV == "dev") {
 // console.log("env: ", env)
 console.log("env: ", env);
 
-//******* userApp start ************** */
-//Express init
-// const app = express();
-
 const corsHandler = cors({ origin: true });
 
 // refactor applyMiddleware to use corsHandler and bodyParser
@@ -39,7 +37,13 @@ const corsHandler = cors({ origin: true });
 
 const applyMiddleware = (handler) => (req, res) => {
     return corsHandler(req, res, (_) => {
-        return bodyParser.json()(req, res, () => {
+        return bodyParser.json()(req, res, async () => {
+            const method = req.url.split("/").pop();
+            await writeLog("activity", {
+              message: `API call made to method: ${method}`,
+              headers: req.headers,
+              body: req.body,
+            });
             return handler(req, res);
         });
     });
@@ -58,14 +62,13 @@ const successResponse = (res, message, data) => {
     return res.json({ status: true, message: message, data: data }).send();
 };
 
+
+//******* userApp start ************** */
+
 //Express init
 const app = express();
 
-// Send request to app to appController
-// app.post("*", appController(req, res));
-
-
-
+// Migrated to app-service.js as createUser
 // app.post("/newUser", (req, res) => {
 //     try {
 //         let obj = JSON.parse(req.body);
@@ -102,83 +105,83 @@ const app = express();
 //         errorResponse(res, error);
 //     }
 // });
+// Migrated to app-service.js
+// app.post("/updateUser", async (req, res) => {
+//     let obj = JSON.parse(req.body);
+//     // let obj = "" // for testing error handling
+//     try {
+//         await admin
+//             .firestore()
+//             .collection("users")
+//             .doc(obj.id)
+//             .set(obj.profile, { merge: true })
+//             .then(async () => {
+//                 // console.log(obj.id + " Updates Successful")
+//                 if (obj.auth) {
+//                     await getAuth()
+//                         .updateUser(obj.id, obj.auth)
+//                         .then((userRecord) => {
+//                             // console.log(userRecord.uid+" Updates Successful")
+//                             successResponse(
+//                                 res,
+//                                 `Successfully updated user: ${obj.profile.dName}, AUTH and PROFILE`
+//                             );
+//                         })
+//                         .catch((error) => {
+//                             console.log("Error updating user");
+//                             errorResponse(res, error);
+//                         });
+//                 } else {
+//                     successResponse(
+//                         res,
+//                         `Successfully updated user: ${obj.profile.dName}'s profile`
+//                     );
+//                 }
+//             })
+//             .catch((error) => {
+//                 console.log("Error updating user profile");
+//                 errorResponse(res, error);
+//             });
+//     } catch (error) {
+//         console.log("Error from catch block");
+//         errorResponse(res, error);
+//     }
+// });
+// Migrated to app-service.js
+// app.post("/deleteUser", async (req, res) => {
+//     let uid = JSON.parse(req.body).uid;
+//     let resObj = {};
+//     // console.log(uid)
 
-app.post("/updateUser", async (req, res) => {
-    let obj = JSON.parse(req.body);
-    // let obj = "" // for testing error handling
-    try {
-        await admin
-            .firestore()
-            .collection("users")
-            .doc(obj.id)
-            .set(obj.profile, { merge: true })
-            .then(async () => {
-                // console.log(obj.id + " Updates Successful")
-                if (obj.auth) {
-                    await getAuth()
-                        .updateUser(obj.id, obj.auth)
-                        .then((userRecord) => {
-                            // console.log(userRecord.uid+" Updates Successful")
-                            successResponse(
-                                res,
-                                `Successfully updated user: ${obj.profile.dName}, AUTH and PROFILE`
-                            );
-                        })
-                        .catch((error) => {
-                            console.log("Error updating user");
-                            errorResponse(res, error);
-                        });
-                } else {
-                    successResponse(
-                        res,
-                        `Successfully updated user: ${obj.profile.dName}'s profile`
-                    );
-                }
-            })
-            .catch((error) => {
-                console.log("Error updating user profile");
-                errorResponse(res, error);
-            });
-    } catch (error) {
-        console.log("Error from catch block");
-        errorResponse(res, error);
-    }
-});
+//     const deleteProfile = () => {
+//         admin
+//             .firestore()
+//             .collection("users")
+//             .doc(uid)
+//             .delete()
+//             .then(() => {
+//                 // console.log(`${uid} Deleted!`)
+//                 successResponse(res, `Successfully deleted user: ${uid}`);
+//             })
+//             .catch((error) => {
+//                 console.log("Error deleting user profile");
+//                 errorResponse(res, error);
+//             });
+//     };
 
-app.post("/deleteUser", async (req, res) => {
-    let uid = JSON.parse(req.body).uid;
-    let resObj = {};
-    // console.log(uid)
-
-    const deleteProfile = () => {
-        admin
-            .firestore()
-            .collection("users")
-            .doc(uid)
-            .delete()
-            .then(() => {
-                // console.log(`${uid} Deleted!`)
-                successResponse(res, `Successfully deleted user: ${uid}`);
-            })
-            .catch((error) => {
-                console.log("Error deleting user profile");
-                errorResponse(res, error);
-            });
-    };
-
-    //delete auth account
-    await getAuth()
-        .deleteUser(uid)
-        .then(() => {
-            console.log("Successfully deleted user auth account");
-            // delete firestore profile doc
-            deleteProfile();
-        })
-        .catch((error) => {
-            console.log("Error deleting user auth account");
-            errorResponse(res, error);
-        });
-});
+//     //delete auth account
+//     await getAuth()
+//         .deleteUser(uid)
+//         .then(() => {
+//             console.log("Successfully deleted user auth account");
+//             // delete firestore profile doc
+//             deleteProfile();
+//         })
+//         .catch((error) => {
+//             console.log("Error deleting user auth account");
+//             errorResponse(res, error);
+//         });
+// });
 
 // TODO: Test and add error handling
 app.post("/resetPass", (req, res) => {
@@ -285,7 +288,8 @@ fsApp.post("/updateArchive", async (req, res) => {
 fsApp.post("/getJobs", async (req, res) => {
     try {
         let errorStatus = false;
-        let depts = JSON.parse(req.body);
+        // let depts = JSON.parse(req.body);
+        let depts = req.body;
         // console.log(depts);
         let jobs = [];
         for (i in depts) {
@@ -903,7 +907,7 @@ exports.fsApp = functions.https.onRequest(applyMiddleware(fsApp));
 //***************** End FsApp ************* */
 
 // ------------------- Dev Tools ---------------- //
-// const devApp = express();
+const devApp = express();
 
 // devApp.post(
 //   "/copyToLocal",
@@ -919,7 +923,9 @@ exports.fsApp = functions.https.onRequest(applyMiddleware(fsApp));
 
 // devApp.post('/deleteOldPosts', cors({origin: "http://localhost:3000"}), async (req,res) => (deleteOldPosts(req,res)))
 
-// exports.devApp = functions.https.onRequest(applyMiddleware(devApp));
+devApp.post("*", (req, res) => devAppController(req, res));
+
+exports.devApp = functions.https.onRequest(applyMiddleware(devApp));
 // --------------------------------------------------------- //
 
 //***************** Start Pub/Sub ************* */

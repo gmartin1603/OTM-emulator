@@ -8,7 +8,8 @@
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "emulators:stop": "npx kill-port 5001 9099 7000 4000"
+    "emulators:stop": "npx kill-port 5001 9099 7000 4000",
+    "add-controller": "node ./scripts/add-controller.js"
   },
   "engines": {
     "node": "18"

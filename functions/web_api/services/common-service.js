@@ -1,5 +1,6 @@
 const Success = require('../models/response/success');
 const ErrorRes = require('../models/response/error');
+const { db } = require('../../helpers/firebase');
 
 const commonService = {
   handlePromise: async (promise) => {
@@ -10,14 +11,6 @@ const commonService = {
       // console.error("Error in handlePromise: \n", error);
       return [null, error];
     }
-  },
-
-  writeToLog: (type, obj) => {
-    const log = {
-      type: type,
-      obj: obj
-    }
-    console.log("Writing to log: ", log);
   },
 
   validateModel: (model) => {
@@ -48,20 +41,48 @@ const commonService = {
     }
   },
 
-  handleError: (res, status, error) => {
+  handleError: async (res, status, error) => {
     // console.error("Error response: ", error);
     const errorResponse = new ErrorRes(error);
     const [pass, err] = commonService.validateModel(errorResponse);
+
     if (!pass) {
       return res.status(500).json({ status: "failed", error: err });
     } else {
       const responseObj = errorResponse.responseObj();
-      console.log("errorResponse: ", responseObj);
-      commonService.writeToLog("error", responseObj);
-      return res.status(400).json(responseObj);
+      // console.log("errorResponse: ", responseObj);
+      await commonService.writeLog("error", responseObj); // writeLog is not a function
+      let res_status = Number(status) ? status : 400;
+      return res.status(res_status).json(responseObj);
     }
+  },
 
-  }
+  writeLog: async (type, obj) => {
+    const get_logs_api = () => db.collection("logs").doc(type).get();
+    const [doc, error] = await commonService.handlePromise(get_logs_api);
+    if (error) {
+      console.error("Error fetching logs:", error);
+      throw error;
+    } else {
+      let logs = [];
+      if (doc.exists) {
+        logs = doc.data().logs;
+      }
+      obj["timestamp"] = new Date();
+      logs.push(obj);
+      // console.log("Writing to log: ", obj);
+      const write_log_api = () => db.collection("logs").doc(type).set({logs: logs}, { merge: true });
+      const [_, err] = await commonService.handlePromise(write_log_api);
+      if (err) {
+        console.error("Error writing to log:", err);
+        throw err;
+      } else {
+        // console.log("Successfully wrote to log");
+        return true;
+      }
+    }
+  },
+
 }
 
 module.exports = commonService;

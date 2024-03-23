@@ -10,7 +10,7 @@ const fs = require("fs");
 const path = require("path");
 
 const name = process.argv[2];
-const verbose = process.argv[3] === "-v" || process.argv[3] === "--verbose" || process.argv[3] === "true";
+const verbose = process.argv[3] === "debug" || process.argv[3] === "true";
 const controllerPath = path.join(__dirname, `../web_api/controllers/${name}-controller.js`);
 const servicePath = path.join(__dirname, `../web_api/services/${name}-service.js`);
 

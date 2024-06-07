@@ -31,6 +31,7 @@ const commonService = {
       return commonService.handleError(res, status, object);
     }
   },
+
   handleSuccess: (res, object) => {
     const successResponse = new Success(object);
     const [pass, error] = commonService.validateModel(successResponse);
@@ -54,6 +55,21 @@ const commonService = {
       await commonService.writeLog("error", responseObj); // writeLog is not a function
       let res_status = Number(status) ? status : 400;
       return res.status(res_status).json(responseObj);
+    }
+  },
+
+  sendPasswordResetEmail: async (email, link) => {
+    // console.log("Sending password reset email to: ", email);
+    const send_password_reset_email_api = () => {
+      // Send email here
+    }
+    const [_, error] = await commonService.handlePromise(send_password_reset_email_api);
+    if (error) {
+      console.error("Error sending password reset email:", error);
+      throw error;
+    } else {
+      // console.log("Successfully sent password reset email");
+      return true;
     }
   },
 

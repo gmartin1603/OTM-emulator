@@ -18,6 +18,7 @@ const deleteOldPosts = require("./dev_routes/deleteOldPosts");
 const { writeLog } = require("./web_api/services/common-service");
 
 // **SCRIPT** CONTROLLER IMPORT START
+const jobsController = require("./web_api/controllers/jobs-controller");
 const userController = require("./web_api/controllers/user-controller");
 const appController = require("./web_api/controllers/app-controller");
 const devAppController = require("./web_api/controllers/devApp-controller");
@@ -74,6 +75,12 @@ const successResponse = (res, message, data) => {
 };
 
 // **SCRIPT** CONTROLLER ROUTING START
+
+  const jobs = express();
+  jobs.post("*", (req, res) => jobsController(req, res));
+
+  exports.jobs = functions.https.onRequest(applyMiddleware(jobs));
+  
 
   const user = express();
   user.post("*", (req, res) => userController(req, res));
@@ -203,27 +210,20 @@ const app = express();
 //             errorResponse(res, error);
 //         });
 // });
-
-// TODO: Test and add error handling
-app.post("/resetPass", (req, res) => {
-    const { email } = req.body;
-    console.log(email);
-    getAuth()
-        .generatePasswordResetLink(email)
-        .then((link) => {
-            successResponse(res, "Password reset link sent to email", {
-                link: link,
-            });
-        })
-        .catch((error) => {
-            errorResponse(res, error);
-        });
-});
-
-// Returns API version from package.json
-app.get("/getVersion", (req, res) => {
-  successResponse(res, API_VERSION);
-});
+// app.post("/resetPass", (req, res) => {
+//     const { email } = req.body;
+//     console.log(email);
+//     getAuth()
+//         .generatePasswordResetLink(email)
+//         .then((link) => {
+//             successResponse(res, "Password reset link sent to email", {
+//                 link: link,
+//             });
+//         })
+//         .catch((error) => {
+//             errorResponse(res, error);
+//         });
+// });
 
 app.post("*", (req, res) => appController(req, res));
 
@@ -237,7 +237,7 @@ exports.app = functions.https.onRequest(applyMiddleware(app));
 const fsApp = express();
 
 fsApp.post("/getVersion", (req, res) => {
-  successResponse(res, "v4.4.0");
+  successResponse(res, API_VERSION);
 });
 
 fsApp.post("/buildArchive", async (req, res) => {

@@ -24,7 +24,7 @@ const appController = async (req, res) => {
 
     handleResponse(res, "error", response);
   } else {
-    console.log("Successfully called appService method:", method);
+    // console.log("Successfully called appService method:", method);
     response = {
       status: "success",
       message: "Successfully called appService method",

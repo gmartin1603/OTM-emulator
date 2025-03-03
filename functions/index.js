@@ -29,11 +29,11 @@ require("dotenv").config();
 let env = "";
 let corsOrigin = "";
 if (process.env.NODE_ENV == "dev") {
-    env = "dev";
-    corsOrigin = "http://localhost:3000";
+  env = "dev";
+  corsOrigin = "http://localhost:3000";
 } else {
-    env = "prod";
-    corsOrigin = process.env.NODE_ENV_CORS_URL;
+  env = "prod";
+  corsOrigin = process.env.NODE_ENV_CORS_URL;
 }
 // console.log("env: ", env)
 console.log("env: ", env);
@@ -48,45 +48,45 @@ const corsHandler = cors({ origin: true });
 // };
 
 const applyMiddleware = (handler) => (req, res) => {
-    return corsHandler(req, res, (_) => {
-        return bodyParser.json()(req, res, async () => {
-            const method = req.url.split("/").pop();
-            await writeLog("activity", {
-              message: `API call made to method: ${method}`,
-              headers: req.headers,
-              body: req.body,
-            });
-            return handler(req, res);
-        });
+  return corsHandler(req, res, (_) => {
+    return bodyParser.json()(req, res, async () => {
+      const method = req.url.split("/").pop();
+      await writeLog("activity", {
+        message: `API call made to method: ${method}`,
+        headers: req.headers,
+        body: req.body,
+      });
+      return handler(req, res);
     });
+  });
 };
 
 const errorResponse = (res, error, code = 500) => {
-    let errorMessage = String(error).split("\n")[0];
-    console.log("Error Message:", errorMessage);
-    if (process.env.NODE_ENV == "dev") {
-        console.log(errorMessage);
-    }
-    return res.json({ code: code, message: errorMessage }).send();
+  let errorMessage = String(error).split("\n")[0];
+  console.log("Error Message:", errorMessage);
+  if (process.env.NODE_ENV == "dev") {
+    console.log(errorMessage);
+  }
+  return res.json({ code: code, message: errorMessage }).send();
 };
 
 const successResponse = (res, message, data) => {
-    return res.json({ status: true, message: message, data: data }).send();
+  return res.json({ status: true, message: message, data: data }).send();
 };
 
 // **SCRIPT** CONTROLLER ROUTING START
 
-  const jobs = express();
-  jobs.post("*", (req, res) => jobsController(req, res));
+const jobs = express();
+jobs.post("*", (req, res) => jobsController(req, res));
 
-  exports.jobs = functions.https.onRequest(applyMiddleware(jobs));
-  
+exports.jobs = functions.https.onRequest(applyMiddleware(jobs));
 
-  const user = express();
-  user.post("*", (req, res) => userController(req, res));
 
-  exports.user = functions.https.onRequest(applyMiddleware(user));
-  
+const user = express();
+user.post("*", (req, res) => userController(req, res));
+
+exports.user = functions.https.onRequest(applyMiddleware(user));
+
 
 // **SCRIPT** CONTROLLER ROUTING END
 
@@ -241,483 +241,484 @@ fsApp.post("/getVersion", (req, res) => {
 });
 
 fsApp.post("/buildArchive", async (req, res) => {
-    const { dept, start } = JSON.parse(req.body);
-    console.log(dept, start);
+  const { dept, start } = JSON.parse(req.body);
+  console.log(dept, start);
 
-    const obj = await buildArchive(dept, start);
+  const obj = await buildArchive(dept, start);
+  console.log(obj);
 
-    await db
-        .collection(dept)
-        .doc("rota")
-        .collection("archive")
-        .doc(`${new Date(start).toDateString()}`)
-        .set(obj)
-        .then(() => {
-            console.log(
-                `Doc written to ${dept}/rota/archive/${new Date(
-                    start
-                ).toDateString()}`
-            );
-        })
-        .catch((error) => {
-            console.error("Error writing document: ", message);
-            errorResponse(res, error);
-        });
+  // await db
+  //   .collection(dept)
+  //   .doc("rota")
+  //   .collection("archive")
+  //   .doc(`${new Date(start).toDateString()}`)
+  //   .set(obj)
+  //   .then(() => {
+  //     console.log(
+  //       `Doc written to ${dept}/rota/archive/${new Date(
+  //         start
+  //       ).toDateString()}`
+  //     );
+  //   })
+  //   .catch((error) => {
+  //     console.error("Error writing document: ", message);
+  //     errorResponse(res, error);
+  //   });
 
-    successResponse(
-        res,
-        `${new Date(start).toDateString()} successfully archived`
-    );
+  successResponse(
+    res,
+    `${new Date(start).toDateString()} successfully archived`
+  );
 });
 
 // Might not need this
 fsApp.post("/updateArchive", async (req, res) => {
-    const body = JSON.parse(req.body);
-    // console.log(body)
-    await db
+  const body = JSON.parse(req.body);
+  // console.log(body)
+  await db
+    .collection(body.dept)
+    .doc("rota")
+    .collection("archive")
+    .doc(body.archive)
+    .get()
+    .then(async (doc) => {
+      if (!doc.exists) {
+        // console.log('No such document!');
+        errorResponse(res, "No such document!", 1004);
+      }
+      console.log(doc.id);
+      let archiveUpdate = structuredClone(doc.data());
+      archiveUpdate[body.shift].rows = body.rows;
+      await db
         .collection(body.dept)
         .doc("rota")
         .collection("archive")
         .doc(body.archive)
-        .get()
-        .then(async (doc) => {
-            if (!doc.exists) {
-                // console.log('No such document!');
-                errorResponse(res, "No such document!", 1004);
-            }
-            console.log(doc.id);
-            let archiveUpdate = structuredClone(doc.data());
-            archiveUpdate[body.shift].rows = body.rows;
-            await db
-                .collection(body.dept)
-                .doc("rota")
-                .collection("archive")
-                .doc(body.archive)
-                .set(archiveUpdate)
-                .catch((error) => {
-                    console.log(error);
-                    errorResponse(res, "Error: updating archive doc", 1005);
-                });
-
-            successResponse(res, "Archive updated successfully");
-        })
+        .set(archiveUpdate)
         .catch((error) => {
-            errorResponse(res, error);
+          console.log(error);
+          errorResponse(res, "Error: updating archive doc", 1005);
         });
+
+      successResponse(res, "Archive updated successfully");
+    })
+    .catch((error) => {
+      errorResponse(res, error);
+    });
 });
 
 fsApp.post("/getJobs", async (req, res) => {
-    try {
-        let errorStatus = false;
-        // let depts = JSON.parse(req.body);
-        let depts = req.body;
-        // console.log(depts);
-        let jobs = [];
-        for (i in depts) {
-            await db
-                .collection(depts[i])
-                .orderBy("order", "asc")
-                .get()
-                .then((querySnapshot) => {
-                    console.log(depts[i]);
-                    querySnapshot.forEach((doc) => {
-                        jobs.push(doc.data());
-                    });
-                })
-                .catch((error) => {
-                    console.error(error);
-                    errorStatus = true;
-                    throw error;
-                });
-        }
-        // console.log(jobs);
-        successResponse(res, "Operation complete", jobs);
-    } catch (error) {
-        errorResponse(res, error);
+  try {
+    let errorStatus = false;
+    // let depts = JSON.parse(req.body);
+    let depts = req.body;
+    // console.log(depts);
+    let jobs = [];
+    for (i in depts) {
+      await db
+        .collection(depts[i])
+        .orderBy("order", "asc")
+        .get()
+        .then((querySnapshot) => {
+          console.log(depts[i]);
+          querySnapshot.forEach((doc) => {
+            jobs.push(doc.data());
+          });
+        })
+        .catch((error) => {
+          console.error(error);
+          errorStatus = true;
+          throw error;
+        });
     }
+    // console.log(jobs);
+    successResponse(res, "Operation complete", jobs);
+  } catch (error) {
+    errorResponse(res, error);
+  }
 });
 
 fsApp.post("/addJob", async (req, res) => {
-    let body = JSON.parse(req.body);
-    // console.log(body)
-    let name = body.label.toLowerCase().replace(/\s/g, "-");
-    // Generate unique ID
-    let id = `${body.group}-${name}-${Math.random()
+  let body = JSON.parse(req.body);
+  // console.log(body)
+  let name = body.label.toLowerCase().replace(/\s/g, "-");
+  // Generate unique ID
+  let id = `${body.group}-${name}-${Math.random()
+    .toString(36)
+    .substring(2, 9)}`;
+  let ids = [];
+  await db
+    .collection(body.dept)
+    .where("group", "==", body.group)
+    .get()
+    .then((querySnapshot) => {
+      querySnapshot.forEach((doc) => {
+        ids.push(doc.id);
+      });
+    })
+    .catch((error) => {
+      console.error(error);
+    });
+  if (ids.includes(id)) {
+    let i = 0;
+    do {
+      console.warn("Generating new ID attempt: " + i);
+      id = `${body.group}-${name}-${Math.random()
         .toString(36)
         .substring(2, 9)}`;
-    let ids = [];
-    await db
-        .collection(body.dept)
-        .where("group", "==", body.group)
-        .get()
-        .then((querySnapshot) => {
-            querySnapshot.forEach((doc) => {
-                ids.push(doc.id);
-            });
-        })
-        .catch((error) => {
-            console.error(error);
-        });
-    if (ids.includes(id)) {
-        let i = 0;
-        do {
-            console.warn("Generating new ID attempt: " + i);
-            id = `${body.group}-${name}-${Math.random()
-                .toString(36)
-                .substring(2, 9)}`;
-            i++;
-        } while (ids.includes(id));
-        console.log("New ID generated: " + id);
-    } else {
-        console.log("ID is unique");
-    }
+      i++;
+    } while (ids.includes(id));
+    console.log("New ID generated: " + id);
+  } else {
+    console.log("ID is unique");
+  }
 
-    // Add job to users
-    let users = body.users;
-    let updatedUsers = 0;
-    await db
-        .collection("users")
-        .where("role", "==", "ee")
-        .get()
-        .then((querySnapshot) => {
-            querySnapshot.forEach(async (doc) => {
-                if (doc.data().dept[0] === body.dept) {
-                    if (users.includes(doc.data().id)) {
-                        let update = doc.data().quals;
-                        update.push(id);
-                        await db
-                            .collection("users")
-                            .doc(doc.data().id)
-                            .set({ quals: update }, { merge: true })
-                            .then(() => {
-                                console.log(`${doc.data().id} updated`);
-                                updatedUsers++;
-                            })
-                            .catch((error) => {
-                                console.log(error);
-                            });
-                    }
-                }
-            });
-        })
-        .catch((error) => {
-            console.log(error);
-        });
-
-    // create job doc
-    let doc = {};
-    for (const key in body) {
-        if (key !== "users") {
-            doc[key] = body[key];
+  // Add job to users
+  let users = body.users;
+  let updatedUsers = 0;
+  await db
+    .collection("users")
+    .where("role", "==", "ee")
+    .get()
+    .then((querySnapshot) => {
+      querySnapshot.forEach(async (doc) => {
+        if (doc.data().dept[0] === body.dept) {
+          if (users.includes(doc.data().id)) {
+            let update = doc.data().quals;
+            update.push(id);
+            await db
+              .collection("users")
+              .doc(doc.data().id)
+              .set({ quals: update }, { merge: true })
+              .then(() => {
+                console.log(`${doc.data().id} updated`);
+                updatedUsers++;
+              })
+              .catch((error) => {
+                console.log(error);
+              });
+          }
         }
-    }
-    doc["id"] = id;
+      });
+    })
+    .catch((error) => {
+      console.log(error);
+    });
 
-    await db
-        .collection(doc.dept)
-        .doc(id)
-        .set(doc, { merge: true })
-        .then(() => {
-            successResponse(res, `Operation complete ${body.label} added`);
-        })
-        .catch((error) => {
-            errorResponse(res, error);
-        });
+  // create job doc
+  let doc = {};
+  for (const key in body) {
+    if (key !== "users") {
+      doc[key] = body[key];
+    }
+  }
+  doc["id"] = id;
+
+  await db
+    .collection(doc.dept)
+    .doc(id)
+    .set(doc, { merge: true })
+    .then(() => {
+      successResponse(res, `Operation complete ${body.label} added`);
+    })
+    .catch((error) => {
+      errorResponse(res, error);
+    });
 });
 
 fsApp.post("/editJob", async (req, res) => {
-    let { job, users } = JSON.parse(req.body);
-    let errorStatus = false;
-    let message = [];
-    // console.log(job)
-    // Update job doc
-    await db
-        .collection(job.dept)
-        .doc(job.id)
-        .set(job, { merge: true })
-        .then(() => {
-            // console.log(`${job.id} updated`);
-            message.push(`${job.label} updated`);
-        })
-        .catch((error) => {
-            console.log(error);
-            errorStatus = true;
-            throw error;
-        });
+  let { job, users } = JSON.parse(req.body);
+  let errorStatus = false;
+  let message = [];
+  // console.log(job)
+  // Update job doc
+  await db
+    .collection(job.dept)
+    .doc(job.id)
+    .set(job, { merge: true })
+    .then(() => {
+      // console.log(`${job.id} updated`);
+      message.push(`${job.label} updated`);
+    })
+    .catch((error) => {
+      console.log(error);
+      errorStatus = true;
+      throw error;
+    });
 
-    // Update users
-    let updatedUsers = 0;
-    await db
-        .collection("users")
-        .where("role", "==", "ee")
-        .get()
-        .then((querySnapshot) => {
-            querySnapshot.forEach(async (doc) => {
-                let user = doc.data();
-                let action = "";
-                if (user.dept[0] === job.dept) {
-                    let update = user.quals;
-                    // console.log(user.quals)
-                    if (
-                        user.quals.includes(job.id) &&
-                        !users.includes(user.id)
-                    ) {
-                        action = "Removed";
-                        update = user.quals.filter((id) => id !== job.id);
-                    } else if (
-                        !user.quals.includes(job.id) &&
-                        users.includes(user.id)
-                    ) {
-                        action = "Added";
-                        update.push(job.id);
-                    }
-                    await db
-                        .collection("users")
-                        .doc(user.id)
-                        .set({ quals: update }, { merge: true })
-                        .then(() => {
-                            console.log(`${user.id} ${action}`);
-                            message.push(`${user.dName} ${action}`);
-                            updatedUsers++;
-                        })
-                        .catch((error) => {
-                            console.log(error);
-                        });
-                }
+  // Update users
+  let updatedUsers = 0;
+  await db
+    .collection("users")
+    .where("role", "==", "ee")
+    .get()
+    .then((querySnapshot) => {
+      querySnapshot.forEach(async (doc) => {
+        let user = doc.data();
+        let action = "";
+        if (user.dept[0] === job.dept) {
+          let update = user.quals;
+          // console.log(user.quals)
+          if (
+            user.quals.includes(job.id) &&
+            !users.includes(user.id)
+          ) {
+            action = "Removed";
+            update = user.quals.filter((id) => id !== job.id);
+          } else if (
+            !user.quals.includes(job.id) &&
+            users.includes(user.id)
+          ) {
+            action = "Added";
+            update.push(job.id);
+          }
+          await db
+            .collection("users")
+            .doc(user.id)
+            .set({ quals: update }, { merge: true })
+            .then(() => {
+              console.log(`${user.id} ${action}`);
+              message.push(`${user.dName} ${action}`);
+              updatedUsers++;
+            })
+            .catch((error) => {
+              console.log(error);
             });
-        })
-        .catch((error) => {
-            console.log(error);
-        });
+        }
+      });
+    })
+    .catch((error) => {
+      console.log(error);
+    });
 
-    successResponse(res, `Operation complete ${message.join(", ")}`);
+  successResponse(res, `Operation complete ${message.join(", ")}`);
 });
 
 fsApp.post("/setPost", (req, res) => {
-    let body = JSON.parse(req.body);
-    for (i in body.data) {
-        const post = body.data[i];
-        db.collection(`${body.dept}-posts`)
-            .doc(post.id)
-            .set(post, { merge: true })
-            .catch((error) => {
-                console.log(error);
-            });
-    }
-    if (body.pos.group === "misc" && !body.data[0].lastMod) {
-        db.collection(body.dept)
-            .doc("rota")
-            .collection("archive")
-            .doc(body.archive)
-            .get()
-            .then(async (doc) => {
-                let archiveUpdate = {};
-                if (doc.exists) {
-                    // update existing archive
-                    archiveUpdate = structuredClone(doc.data());
-                    let rowUpdate = {};
-                    let active = false;
-                    archiveUpdate[body.data[0].shift].rows.filter((row, i) => {
-                        if (row.id === body.pos.id) {
-                            active = true;
-                            rowUpdate = structuredClone(row);
-                            body.data.map((post) => {
-                                let day = new Date(post.date).getDay();
-                                if (day === 0) {
-                                    rowUpdate[7] = post.id;
-                                } else {
-                                    rowUpdate[day] = post.id;
-                                }
-                            });
-                            // console.log(rowUpdate)
-                            archiveUpdate[body.data[0].shift].rows[i] =
-                                rowUpdate;
-                        }
-                    });
-                    if (!active) {
-                        rowUpdate = {
-                            id: body.pos.id,
-                            label: body.pos.label,
-                            color: body.data[0].color,
-                            group: body.pos.group,
-                            1: "",
-                            2: "",
-                            3: "",
-                            4: "",
-                            5: "",
-                            6: "",
-                            7: "",
-                        };
-                        body.data.map((post) => {
-                            let day = new Date(post.date).getDay();
-                            if (day === 0) {
-                                rowUpdate[7] = post.id;
-                            } else {
-                                rowUpdate[day] = post.id;
-                            }
-                        });
-                        archiveUpdate[body.data[0].shift].rows.push(rowUpdate);
-                    }
-
-                    await db
-                        .collection(body.dept)
-                        .doc("rota")
-                        .collection("archive")
-                        .doc(body.archive)
-                        .set(archiveUpdate)
-                        .then(() => {
-                            successResponse(
-                                res,
-                                "Operation complete, archive update"
-                            );
-                        })
-                        .catch((error) => {
-                            errorResponse(res, error);
-                        });
+  let body = JSON.parse(req.body);
+  for (i in body.data) {
+    const post = body.data[i];
+    db.collection(`${body.dept}-posts`)
+      .doc(post.id)
+      .set(post, { merge: true })
+      .catch((error) => {
+        console.log(error);
+      });
+  }
+  if (body.pos.group === "misc" && !body.data[0].lastMod) {
+    db.collection(body.dept)
+      .doc("rota")
+      .collection("archive")
+      .doc(body.archive)
+      .get()
+      .then(async (doc) => {
+        let archiveUpdate = {};
+        if (doc.exists) {
+          // update existing archive
+          archiveUpdate = structuredClone(doc.data());
+          let rowUpdate = {};
+          let active = false;
+          archiveUpdate[body.data[0].shift].rows.filter((row, i) => {
+            if (row.id === body.pos.id) {
+              active = true;
+              rowUpdate = structuredClone(row);
+              body.data.map((post) => {
+                let day = new Date(post.date).getDay();
+                if (day === 0) {
+                  rowUpdate[7] = post.id;
                 } else {
-                    // create archive doc
-                    const obj = await buildArchive(body.dept, body.archive);
-
-                    await db
-                        .collection(body.dept)
-                        .doc("rota")
-                        .collection("archive")
-                        .doc(body.archive)
-                        .set(obj)
-                        .then(() => {
-                            console.log(
-                                `Doc written to ${body.dept}/rota/archive/${body.archive}`
-                            );
-                        })
-                        .catch((error) => {
-                            console.error("Error writing document: ", error);
-                            errorResponse(res, error);
-                        });
-                    successResponse(
-                        res,
-                        "Operation complete, archive doc created"
-                    );
+                  rowUpdate[day] = post.id;
                 }
-            })
-            .catch((error) => {
-                errorResponse(res, error);
+              });
+              // console.log(rowUpdate)
+              archiveUpdate[body.data[0].shift].rows[i] =
+                rowUpdate;
+            }
+          });
+          if (!active) {
+            rowUpdate = {
+              id: body.pos.id,
+              label: body.pos.label,
+              color: body.data[0].color,
+              group: body.pos.group,
+              1: "",
+              2: "",
+              3: "",
+              4: "",
+              5: "",
+              6: "",
+              7: "",
+            };
+            body.data.map((post) => {
+              let day = new Date(post.date).getDay();
+              if (day === 0) {
+                rowUpdate[7] = post.id;
+              } else {
+                rowUpdate[day] = post.id;
+              }
             });
-    } else {
-        successResponse(res, "Operation complete, no archive update");
-    }
-});
+            archiveUpdate[body.data[0].shift].rows.push(rowUpdate);
+          }
 
-fsApp.post("/deletePost", async (req, res) => {
-    let body = JSON.parse(req.body);
-    let obj = {};
-    await db
-        .collection(`${body.dept}-posts`)
-        .doc(body.post)
-        .delete()
-        .then(() => {
-            console.log(`${body.post} Deleted!`);
-        })
-        .catch((error) => {
-            res.status(error?.status).send(error);
-        });
-    if (body.misc) {
-        await db
+          await db
             .collection(body.dept)
             .doc("rota")
             .collection("archive")
             .doc(body.archive)
-            .get()
-            .then(async (doc) => {
-                if (doc.exists) {
-                    obj = new Object(doc.data());
-                    obj[body.shift].rows.map((row) => {
-                        if (row.id === body.pos) {
-                            console.log(row.id, body.pos);
-                            let active = false;
-                            for (const key in row) {
-                                if (Number.isInteger(parseInt(key))) {
-                                    if (row[key] === body.post) {
-                                        console.log("Remove", body.post);
-                                        row[key] = "";
-                                    } else if (row[key].length > 0) {
-                                        active = true;
-                                    }
-                                }
-                            }
-                            if (!active) {
-                                console.log("Deleting Row", row.id);
-                                obj[body.shift].rows = obj[
-                                    body.shift
-                                ].rows.filter((row) => row.id !== body.pos);
-                            }
-                        }
-                    });
-                    await db
-                        .collection(body.dept)
-                        .doc("rota")
-                        .collection("archive")
-                        .doc(body.archive)
-                        .set(obj)
-                        .then(() => {
-                            console.log(`${body.archive} Updated!`);
-                        })
-                        .catch((error) => {
-                            console.log(error);
-                        });
-                    successResponse(res, "Operation complete, archive update");
-                } else {
-                    errorResponse(res, "Archive doc not found", 1004);
-                }
+            .set(archiveUpdate)
+            .then(() => {
+              successResponse(
+                res,
+                "Operation complete, archive update"
+              );
+            })
+            .catch((error) => {
+              errorResponse(res, error);
             });
-    } else {
-        successResponse(res, "Operation complete, no archive update");
-    }
+        } else {
+          // create archive doc
+          const obj = await buildArchive(body.dept, body.archive);
+
+          await db
+            .collection(body.dept)
+            .doc("rota")
+            .collection("archive")
+            .doc(body.archive)
+            .set(obj)
+            .then(() => {
+              console.log(
+                `Doc written to ${body.dept}/rota/archive/${body.archive}`
+              );
+            })
+            .catch((error) => {
+              console.error("Error writing document: ", error);
+              errorResponse(res, error);
+            });
+          successResponse(
+            res,
+            "Operation complete, archive doc created"
+          );
+        }
+      })
+      .catch((error) => {
+        errorResponse(res, error);
+      });
+  } else {
+    successResponse(res, "Operation complete, no archive update");
+  }
+});
+
+fsApp.post("/deletePost", async (req, res) => {
+  let body = JSON.parse(req.body);
+  let obj = {};
+  await db
+    .collection(`${body.dept}-posts`)
+    .doc(body.post)
+    .delete()
+    .then(() => {
+      console.log(`${body.post} Deleted!`);
+    })
+    .catch((error) => {
+      res.status(error?.status).send(error);
+    });
+  if (body.misc) {
+    await db
+      .collection(body.dept)
+      .doc("rota")
+      .collection("archive")
+      .doc(body.archive)
+      .get()
+      .then(async (doc) => {
+        if (doc.exists) {
+          obj = new Object(doc.data());
+          obj[body.shift].rows.map((row) => {
+            if (row.id === body.pos) {
+              console.log(row.id, body.pos);
+              let active = false;
+              for (const key in row) {
+                if (Number.isInteger(parseInt(key))) {
+                  if (row[key] === body.post) {
+                    console.log("Remove", body.post);
+                    row[key] = "";
+                  } else if (row[key].length > 0) {
+                    active = true;
+                  }
+                }
+              }
+              if (!active) {
+                console.log("Deleting Row", row.id);
+                obj[body.shift].rows = obj[
+                  body.shift
+                ].rows.filter((row) => row.id !== body.pos);
+              }
+            }
+          });
+          await db
+            .collection(body.dept)
+            .doc("rota")
+            .collection("archive")
+            .doc(body.archive)
+            .set(obj)
+            .then(() => {
+              console.log(`${body.archive} Updated!`);
+            })
+            .catch((error) => {
+              console.log(error);
+            });
+          successResponse(res, "Operation complete, archive update");
+        } else {
+          errorResponse(res, "Archive doc not found", 1004);
+        }
+      });
+  } else {
+    successResponse(res, "Operation complete, no archive update");
+  }
 });
 
 fsApp.post("/deleteJob", async (req, res) => {
-    let body = JSON.parse(req.body);
+  let body = JSON.parse(req.body);
 
-    for (const i in body.posts) {
-        admin
-            .firestore()
-            .collection(`${body.dept}-posts`)
-            .doc(i)
-            .delete()
-            .then(() => {
-                console.log(`${obj.doc} Deleted!`);
-            })
-            .catch((error) => {
-                console.log(error);
-            });
-    }
-
+  for (const i in body.posts) {
     admin
-        .firestore()
-        .collection(body.dept)
-        .doc(body.job)
-        .delete()
-        .then(() => {
-            successResponse(res, `Operation complete ${body.job} deleted`);
-        })
-        .catch((error) => {
-            errorResponse(res, error);
-        });
+      .firestore()
+      .collection(`${body.dept}-posts`)
+      .doc(i)
+      .delete()
+      .then(() => {
+        console.log(`${obj.doc} Deleted!`);
+      })
+      .catch((error) => {
+        console.log(error);
+      });
+  }
+
+  admin
+    .firestore()
+    .collection(body.dept)
+    .doc(body.job)
+    .delete()
+    .then(() => {
+      successResponse(res, `Operation complete ${body.job} deleted`);
+    })
+    .catch((error) => {
+      errorResponse(res, error);
+    });
 });
 
 fsApp.post("/mkDoc", async (req, res) => {
-    let load = JSON.parse(req.body);
+  let load = JSON.parse(req.body);
 
-    admin
-        .firestore()
-        .collection(load.dept)
-        .doc(load.id)
-        .set(load, { merge: true })
-        .then(() => {
-            successResponse(res, "Operation complete");
-        })
-        .catch((error) => {
-            errorResponse(res, error);
-        });
+  admin
+    .firestore()
+    .collection(load.dept)
+    .doc(load.id)
+    .set(load, { merge: true })
+    .then(() => {
+      successResponse(res, "Operation complete");
+    })
+    .catch((error) => {
+      errorResponse(res, error);
+    });
 });
 
 fsApp.post("/editRota", async (req, res) => {
@@ -728,199 +729,199 @@ fsApp.post("/editRota", async (req, res) => {
     .doc(body.id)
     .set(body, { merge: true })
     .then(() => {
-        successResponse(res, "Rota update complete");
+      successResponse(res, "Rota update complete");
     })
     .catch((error) => {
-        errorResponse(res, error);
+      errorResponse(res, error);
     });
 });
 
 fsApp.post("/updateField", async (req, res) => {
-    let body = JSON.parse(req.body);
+  let body = JSON.parse(req.body);
 
-    const batchWrite = () => {
-        console.log(body.docs);
-        for (const i in body.docs) {
-            // update[body.field][body.data[i].id]=body.data[i]
-            admin
-                .firestore()
-                .collection(body.coll)
-                .doc(body.docs[i].id)
-                .set({ [body.field]: body.docs[i].quals }, { merge: true })
-                .catch((error) => {
-                    console.log(error);
-                });
-        }
-        successResponse(res, "Operation complete");
-    };
-    batchWrite();
+  const batchWrite = () => {
+    console.log(body.docs);
+    for (const i in body.docs) {
+      // update[body.field][body.data[i].id]=body.data[i]
+      admin
+        .firestore()
+        .collection(body.coll)
+        .doc(body.docs[i].id)
+        .set({ [body.field]: body.docs[i].quals }, { merge: true })
+        .catch((error) => {
+          console.log(error);
+        });
+    }
+    successResponse(res, "Operation complete");
+  };
+  batchWrite();
 });
 
 fsApp.post("/updateDoc", async (req, res) => {
-    let body = JSON.parse(req.body);
+  let body = JSON.parse(req.body);
 
-    const batchWrite = () => {
-        for (i in body.data) {
-            // update[body.field][body.data[i].id]=body.data[i]
-            admin
-                .firestore()
-                .collection(body.coll)
-                .doc(body.doc)
-                .set(
-                    { [body.field]: { [body.data[i].id]: body.data[i] } },
-                    { merge: true }
-                )
-                .catch((error) => {
-                    console.log(error);
-                });
-        }
-    };
-    batchWrite();
-    successResponse(res, `Operation complete ${body.doc} updated`);
+  const batchWrite = () => {
+    for (i in body.data) {
+      // update[body.field][body.data[i].id]=body.data[i]
+      admin
+        .firestore()
+        .collection(body.coll)
+        .doc(body.doc)
+        .set(
+          { [body.field]: { [body.data[i].id]: body.data[i] } },
+          { merge: true }
+        )
+        .catch((error) => {
+          console.log(error);
+        });
+    }
+  };
+  batchWrite();
+  successResponse(res, `Operation complete ${body.doc} updated`);
 });
 
 fsApp.post("/updateBids", async (req, res) => {
-    let body = JSON.parse(req.body);
+  let body = JSON.parse(req.body);
 
-    await db
+  await db
+    .collection(body.coll)
+    .doc(body.doc)
+    .get()
+    .then(async (document) => {
+      // TODO: Test this
+      // if (!document.exists) {
+      //     errorResponse(res, "Document not found", 1004);
+      //     return
+      // }
+      let doc = document.data();
+      // console.log(doc)
+      for (const key in doc.seg) {
+        // if doc.seg[key].bids = undefined
+        if (!doc.seg[key].bids) {
+          doc.seg[key]["bids"] = [];
+        }
+        // if user bid on segment (segs[key])
+        if (body.bids.includes(key)) {
+          let arr = [];
+          let mod = false;
+          doc.seg[key].bids.map((obj) => {
+            // if user bid exists => overwrite to update
+            if (obj.name === body.user.name) {
+              mod = true;
+              arr.push(body.user);
+            } else {
+              arr.push(obj);
+            }
+          });
+          // if no prior user bid
+          if (!mod) {
+            arr.push(body.user);
+          }
+          doc.seg[key].bids = arr;
+          // segment not bid on or bid was removed
+        } else {
+          console.log("Removed Bid from Segment " + key);
+          let arr = [];
+          doc.seg[key].bids.map((obj) => {
+            if (obj.name !== body.user.name) {
+              arr.push(obj);
+            }
+          });
+          doc.seg[key].bids = arr;
+        }
+      }
+      await db
         .collection(body.coll)
         .doc(body.doc)
-        .get()
-        .then(async (document) => {
-            // TODO: Test this
-            // if (!document.exists) {
-            //     errorResponse(res, "Document not found", 1004);
-            //     return
-            // }
-            let doc = document.data();
-            // console.log(doc)
-            for (const key in doc.seg) {
-                // if doc.seg[key].bids = undefined
-                if (!doc.seg[key].bids) {
-                    doc.seg[key]["bids"] = [];
-                }
-                // if user bid on segment (segs[key])
-                if (body.bids.includes(key)) {
-                    let arr = [];
-                    let mod = false;
-                    doc.seg[key].bids.map((obj) => {
-                        // if user bid exists => overwrite to update
-                        if (obj.name === body.user.name) {
-                            mod = true;
-                            arr.push(body.user);
-                        } else {
-                            arr.push(obj);
-                        }
-                    });
-                    // if no prior user bid
-                    if (!mod) {
-                        arr.push(body.user);
-                    }
-                    doc.seg[key].bids = arr;
-                    // segment not bid on or bid was removed
-                } else {
-                    console.log("Removed Bid from Segment " + key);
-                    let arr = [];
-                    doc.seg[key].bids.map((obj) => {
-                        if (obj.name !== body.user.name) {
-                            arr.push(obj);
-                        }
-                    });
-                    doc.seg[key].bids = arr;
-                }
-            }
-            await db
-                .collection(body.coll)
-                .doc(body.doc)
-                .set(doc, { merge: true })
-                .then(() =>
-                    successResponse(res, `Selections for ${body.doc} updated`)
-                )
-                .catch((error) => errorResponse(res, error));
-        });
+        .set(doc, { merge: true })
+        .then(() =>
+          successResponse(res, `Selections for ${body.doc} updated`)
+        )
+        .catch((error) => errorResponse(res, error));
+    });
 });
 
 fsApp.post("/deleteDoc", async (req, res) => {
-    let obj = JSON.parse(req.body);
-    await admin
-        .firestore()
-        .collection(obj.coll)
-        .doc(obj.doc)
-        .delete()
-        .then(() => {
-            successResponse(res, `Operation complete ${obj.doc} deleted`);
-        })
-        .catch((error) => {
-            errorResponse(res, error);
-        });
+  let obj = JSON.parse(req.body);
+  await admin
+    .firestore()
+    .collection(obj.coll)
+    .doc(obj.doc)
+    .delete()
+    .then(() => {
+      successResponse(res, `Operation complete ${obj.doc} deleted`);
+    })
+    .catch((error) => {
+      errorResponse(res, error);
+    });
 });
 
 fsApp.post("/deleteDocField", async (req, res) => {
-    let obj = JSON.parse(req.body);
-    console.log(obj);
+  let obj = JSON.parse(req.body);
+  console.log(obj);
 
-    await admin
-        .firestore()
-        .collection(obj.coll)
-        .doc(obj.doc)
-        .get()
-        .then((doc) => {
-            const data = doc.data();
+  await admin
+    .firestore()
+    .collection(obj.coll)
+    .doc(obj.doc)
+    .get()
+    .then((doc) => {
+      const data = doc.data();
 
-            let objUpdate = {};
-            const removeField = (map) => {
-                for (const property in map) {
-                    if (property === obj.field.toString()) {
-                        console.log(
-                            "REMOVED " + obj.field + " from " + obj.doc
-                        );
-                    } else {
-                        objUpdate[property] = map[property];
-                    }
-                }
-            };
+      let objUpdate = {};
+      const removeField = (map) => {
+        for (const property in map) {
+          if (property === obj.field.toString()) {
+            console.log(
+              "REMOVED " + obj.field + " from " + obj.doc
+            );
+          } else {
+            objUpdate[property] = map[property];
+          }
+        }
+      };
 
-            let docUpdate = {};
-            const updateNested = () => {
-                for (const property in data) {
-                    if (property !== obj.nestedObj) {
-                        docUpdate[property] = data[property];
-                    } else {
-                        docUpdate[obj.nestedObj] = objUpdate;
-                    }
-                }
-            };
+      let docUpdate = {};
+      const updateNested = () => {
+        for (const property in data) {
+          if (property !== obj.nestedObj) {
+            docUpdate[property] = data[property];
+          } else {
+            docUpdate[obj.nestedObj] = objUpdate;
+          }
+        }
+      };
 
-            const makeChange = async (update) => {
-                await admin
-                    .firestore()
-                    .collection(obj.coll)
-                    .doc(obj.doc)
-                    .set(update);
-            };
+      const makeChange = async (update) => {
+        await admin
+          .firestore()
+          .collection(obj.coll)
+          .doc(obj.doc)
+          .set(update);
+      };
 
-            if (obj.nestedObj) {
-                removeField(data[obj.nestedObj]);
-                updateNested();
-                makeChange(docUpdate);
-                successResponse(
-                    res,
-                    `Operation complete ${obj.doc} updated`,
-                    docUpdate
-                );
-            } else {
-                removeField(data);
-                makeChange(objUpdate);
-                successResponse(
-                    res,
-                    `Operation complete ${obj.doc} updated`,
-                    objUpdate
-                );
-            }
-        })
-        .catch((error) => {
-            errorResponse(res, error);
-        });
+      if (obj.nestedObj) {
+        removeField(data[obj.nestedObj]);
+        updateNested();
+        makeChange(docUpdate);
+        successResponse(
+          res,
+          `Operation complete ${obj.doc} updated`,
+          docUpdate
+        );
+      } else {
+        removeField(data);
+        makeChange(objUpdate);
+        successResponse(
+          res,
+          `Operation complete ${obj.doc} updated`,
+          objUpdate
+        );
+      }
+    })
+    .catch((error) => {
+      errorResponse(res, error);
+    });
 });
 
 exports.fsApp = functions.https.onRequest(applyMiddleware(fsApp));
@@ -930,16 +931,16 @@ exports.fsApp = functions.https.onRequest(applyMiddleware(fsApp));
 // ------------------- Dev Tools ---------------- //
 const devApp = express();
 
-// devApp.post(
-//   "/copyToLocal",
-//   async (req, res) => copyToLocal(req, res)
-//   );
-  
-// devApp.post(
-//   "/writeToFirestore",
-//   async (req, res) => writeToFirestore(req, res)
-// );
-  
+devApp.post(
+  "/copyToLocal",
+  async (req, res) => copyToLocal(req, res)
+  );
+
+devApp.post(
+  "/writeToFirestore",
+  async (req, res) => writeToFirestore(req, res)
+);
+
 // devApp.post('/updatePosts', cors({origin: "http://localhost:3000"}), async (req,res) => (updatePosts(req,res)))
 
 // devApp.post('/deleteOldPosts', cors({origin: "http://localhost:3000"}), async (req,res) => (deleteOldPosts(req,res)))
